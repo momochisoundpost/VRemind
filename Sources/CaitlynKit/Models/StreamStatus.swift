@@ -17,7 +17,7 @@ public struct StreamStatus: Equatable, Sendable {
 
     /// The live video when we know its id, otherwise the channel's `/live` page.
     public func watchURL(channelHandle: String) -> URL {
-        if isLive, let videoId, let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)") {
+        if isLive, let videoId, !videoId.isEmpty, let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)") {
             return url
         }
         return URL(string: "https://www.youtube.com/\(channelHandle)/live")!
