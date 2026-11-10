@@ -7,19 +7,48 @@ import Testing
 struct MenuBarStatusTests {
     private let now = Date(timeIntervalSince1970: 2_000_000)
 
-    @Test @MainActor func popoverContentHeightFitsCompactly() {
-        let configService = ConfigSyncService(cacheDirectory: URL(fileURLWithPath: "/tmp/caitlyn_test_cache"))
-        let liveService = LiveStatusService(fetcher: { _ in "" })
-        let popover = MenuBarStatusView.makePopover(
+    @Test @MainActor func popoverContentHeightFitsCompactlyForWatchlistSlots() {
+        let suiteName = "MenuBarPopoverTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let configService = ConfigSyncService(
+            cacheDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        )
+        let watchlistService = WatchlistService(
             configService: configService,
-            liveService: liveService,
+            userDefaults: defaults,
+            fetcher: { _ in "<html><body>ytInitialData</body></html>" }
+        )
+        let popover1 = MenuBarStatusView.makePopover(
+            configService: configService,
+            watchlistService: watchlistService,
             onOpenHub: {},
             onQuit: {}
         )
-        let fittingSize = popover.contentViewController?.view.fittingSize ?? .zero
-        #expect(popover.contentSize.width == 320)
-        #expect(popover.contentSize.height == fittingSize.height)
-        #expect(popover.contentSize.height <= 230)
+        let size1 = popover1.contentSize
+        #expect(size1.width == 320)
+        #expect(size1.height > 150 && size1.height <= 300)
+
+        #expect(watchlistService.addChannel(name: "Kobo", handle: "@kobo") == true)
+        let popover2 = MenuBarStatusView.makePopover(
+            configService: configService,
+            watchlistService: watchlistService,
+            onOpenHub: {},
+            onQuit: {}
+        )
+        let size2 = popover2.contentSize
+        #expect(size2.height > size1.height)
+
+        #expect(watchlistService.addChannel(name: "Ina", handle: "@ina") == true)
+        let popover3 = MenuBarStatusView.makePopover(
+            configService: configService,
+            watchlistService: watchlistService,
+            onOpenHub: {},
+            onQuit: {}
+        )
+        let size3 = popover3.contentSize
+        #expect(size3.height > size2.height)
     }
 
     @Test func liveWithStartTimeShowsElapsed() {

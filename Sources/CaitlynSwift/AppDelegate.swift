@@ -7,6 +7,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var configService = ConfigSyncService(cacheDirectory: ConfigSyncService.defaultCacheDirectory())
     private lazy var liveService = LiveStatusService()
+    private lazy var watchlistService = WatchlistService(configService: configService)
 
     private var statusItem: NSStatusItem?
     private lazy var popover = NSPopover()
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await configService.sync()
         }
         Task {
+            await watchlistService.refreshAll()
             await liveService.refresh()
         }
         startPollTimer()
@@ -40,13 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePopover(_:))
         }
         self.statusItem = item
-        updateStatusButton(isLive: liveService.status.isLive)
+        updateStatusButton(isLive: watchlistService.isAnyLive)
     }
 
     private func setupPopover() {
         popover = MenuBarStatusView.makePopover(
             configService: configService,
-            liveService: liveService,
+            watchlistService: watchlistService,
             onOpenHub: { [weak self] in
                 self?.openMainHub()
             },
@@ -57,12 +59,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observeStatus() {
-        liveService.$status
+        watchlistService.$statuses
+            .combineLatest(watchlistService.$customChannels)
             .receive(on: RunLoop.main)
-            .sink { [weak self] status in
-                self?.updateStatusButton(isLive: status.isLive)
-                if let view = self?.popover.contentViewController?.view {
-                    self?.popover.contentSize = view.fittingSize
+            .sink { [weak self] _, _ in
+                guard let self else { return }
+                self.updateStatusButton(isLive: self.watchlistService.isAnyLive)
+                if let view = self.popover.contentViewController?.view {
+                    view.invalidateIntrinsicContentSize()
+                    view.layoutSubtreeIfNeeded()
+                    self.popover.contentSize = view.fittingSize
                 }
             }
             .store(in: &cancellables)
@@ -115,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pollTimer?.invalidate()
         pollTimer = Timer.scheduledTimer(withTimeInterval: AppConstants.livePollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
+                await self?.watchlistService.refreshAll()
                 await self?.liveService.refresh()
             }
         }
@@ -138,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                await self?.watchlistService.refreshAll()
                 await self?.liveService.refresh()
                 self?.startPollTimer()
             }

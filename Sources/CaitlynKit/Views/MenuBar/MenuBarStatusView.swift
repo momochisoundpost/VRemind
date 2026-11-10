@@ -1,26 +1,30 @@
+import AppKit
 import SwiftUI
 
 public struct MenuBarStatusView: View {
     @ObservedObject private var configService: ConfigSyncService
-    @ObservedObject private var liveService: LiveStatusService
+    @ObservedObject private var watchlistService: WatchlistService
     private let onOpenHub: () -> Void
     private let onQuit: () -> Void
+    private let onLayoutChanged: (() -> Void)?
 
     public init(
         configService: ConfigSyncService,
-        liveService: LiveStatusService,
+        watchlistService: WatchlistService,
         onOpenHub: @escaping () -> Void,
-        onQuit: @escaping () -> Void
+        onQuit: @escaping () -> Void,
+        onLayoutChanged: (() -> Void)? = nil
     ) {
         self.configService = configService
-        self.liveService = liveService
+        self.watchlistService = watchlistService
         self.onOpenHub = onOpenHub
         self.onQuit = onQuit
+        self.onLayoutChanged = onLayoutChanged
     }
 
     public static func makePopover(
         configService: ConfigSyncService,
-        liveService: LiveStatusService,
+        watchlistService: WatchlistService,
         onOpenHub: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) -> NSPopover {
@@ -28,9 +32,18 @@ public struct MenuBarStatusView: View {
         popover.behavior = .transient
         let rootView = MenuBarStatusView(
             configService: configService,
-            liveService: liveService,
+            watchlistService: watchlistService,
             onOpenHub: onOpenHub,
-            onQuit: onQuit
+            onQuit: onQuit,
+            onLayoutChanged: { [weak popover] in
+                DispatchQueue.main.async {
+                    if let view = popover?.contentViewController?.view {
+                        view.invalidateIntrinsicContentSize()
+                        view.layoutSubtreeIfNeeded()
+                        popover?.contentSize = view.fittingSize
+                    }
+                }
+            }
         )
         let controller = NSHostingController(rootView: rootView)
         popover.contentViewController = controller
@@ -39,89 +52,58 @@ public struct MenuBarStatusView: View {
     }
 
     public static func statusLine(status: StreamStatus, lastStreamAt: Date?, now: Date) -> String {
-        if status.isLive {
-            if let startedAt = status.startedAt {
-                return "Live for " + ElapsedTime.short(from: startedAt, to: now)
-            }
-            return "Live now"
-        }
-        if let lastStreamAt {
-            return "Last stream " + ElapsedTime.short(from: lastStreamAt, to: now) + " ago"
-        }
-        return "Offline"
+        WatchlistChannelCard.statusLine(status: status, lastStreamAt: lastStreamAt, now: now)
     }
 
     public var body: some View {
-        let status = liveService.status
+        let channels = watchlistService.channels
         let config = configService.config
 
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.accent.opacity(0.18))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Theme.accent)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Caitlyn Momochi")
-                        .font(.system(size: 13, weight: .bold))
-                    Text(config.channelHandle)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                StatusBadge(isLive: status.isLive)
-            }
-
-            TimelineView(.periodic(from: .now, by: 60)) { context in
-                VStack(alignment: .leading, spacing: 4) {
-                    if status.isLive, let title = status.title, !title.isEmpty {
-                        Text(title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(2)
-                    }
-                    Text(
-                        Self.statusLine(
-                            status: status,
-                            lastStreamAt: config.latestReplayDate,
-                            now: context.date
-                        )
-                    )
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(NSColor.controlBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
-                )
-            }
-
-            Button {
-                LinkOpener.open(status.watchURL(channelHandle: config.channelHandle))
-            } label: {
-                Text("Watch Stream ↗")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Image(systemName: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(status.isLive ? Theme.live : Theme.accent)
-                    )
+                    .foregroundColor(Theme.accent)
+                Text("VTuber Watchlist")
+                    .font(.system(size: 12, weight: .bold))
+                Spacer()
+                Text("\(channels.count)/\(WatchlistService.maxSlots) slots")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
+
+            VStack(spacing: 8) {
+                ForEach(channels) { channel in
+                    WatchlistChannelCard(
+                        channel: channel,
+                        status: watchlistService.status(for: channel),
+                        lastStreamAt: channel.isPinned ? config.latestReplayDate : nil,
+                        onRemove: channel.isPinned ? nil : {
+                            _ = watchlistService.removeChannel(id: channel.id)
+                            onLayoutChanged?()
+                        }
+                    )
+                }
+
+                if channels.count < WatchlistService.maxSlots {
+                    AddChannelCard(
+                        currentCount: channels.count,
+                        onAdd: { name, handle in
+                            let added = watchlistService.addChannel(name: name, handle: handle)
+                            if added {
+                                Task {
+                                    await watchlistService.refreshAll()
+                                }
+                            }
+                            onLayoutChanged?()
+                            return added
+                        },
+                        onExpansionChanged: {
+                            onLayoutChanged?()
+                        }
+                    )
+                }
+            }
 
             HStack(spacing: 8) {
                 Button {
