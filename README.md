@@ -4,9 +4,9 @@ A lightweight native macOS 12+ (Monterey and newer) desktop companion app for in
 
 ## Features
 
-- **Menu Bar Live Indicator (`NSStatusItem` + `NSPopover`)**: Sits quietly in the macOS menu bar (`sparkles` when offline, red `dot.radiowaves.left.and.right` when live on YouTube). Polls `https://www.youtube.com/@bukancaitlyn/live` every 3 minutes (pausing while displays sleep) and shows live uptime or time since last stream.
+- **Menu Bar Live Indicator & 3-Slot VTuber Watchlist (`NSStatusItem` + `NSPopover`)**: Sits quietly in the macOS menu bar (`sparkles` when offline, red `dot.radiowaves.left.and.right` when any watched VTuber is live on YouTube). Slot 1 is permanently pinned to Caitlyn Momochi with their channel profile picture, and you can add up to 2 additional VTubers by `@handle` (persisted in `UserDefaults`). Polls `/live` every 3 minutes (pausing while displays sleep) and shows live stream titles, uptime, or time since last stream.
 - **Main Hub Window**:
-  - **Live & Replays**: Stream archive grid sorted newest-first with 1-click launch in your default browser.
+  - **Live & Replays**: Paginated stream archive grid (8 VODs per page, 30 bundled VODs) sorted newest-first with 1-click launch in your default browser.
   - **Cait-pedia**: Searchable, category-filtered glossary of Caitlyn's lore, eras, and chat memes.
   - **Clip Roulette**: Spin to land on a random highlight clip without immediate repeats.
 - **Hybrid Offline + Remote Sync**: Boots immediately from the bundled `caitlyn_hub.json` seed, then syncs the latest copy from GitHub Raw and caches it in `~/Library/Application Support/CaitlynSwift/caitlyn_hub.json`.
