@@ -11,6 +11,11 @@ struct ModelTests {
         #expect(seed.clips.count == 5)
     }
 
+    @Test func avatarURLDecodesFromSeed() {
+        let seed = HubConfig.loadBundledSeed()
+        #expect(seed.avatarURL?.absoluteString == "https://yt3.googleusercontent.com/4rJNGjXsRJD2IM3KUkspGsjCjdfO170tW7U36kdg_PqzytqnfB3LwdOsYfjRAP4idOr_kh8WEA=s160-c-k-c0x00ffffff-no-rj")
+    }
+
     @Test func latestReplayDate() {
         let seed = HubConfig.loadBundledSeed()
         #expect(seed.latestReplayDate == ISO8601DateFormatter().date(from: "2026-11-05T12:00:00Z"))

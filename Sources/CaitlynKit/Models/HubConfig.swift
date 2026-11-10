@@ -3,13 +3,31 @@ import Foundation
 public struct HubConfig: Codable, Equatable, Sendable {
     public var version: Int
     public var channelHandle: String
+    public var avatarURL: URL?
     public var lore: [LoreEntry]
     public var replays: [ReplayVOD]
     public var clips: [CuratedClip]
 
-    public init(version: Int, channelHandle: String, lore: [LoreEntry], replays: [ReplayVOD], clips: [CuratedClip]) {
+    enum CodingKeys: String, CodingKey {
+        case version
+        case channelHandle
+        case avatarURL = "avatarUrl"
+        case lore
+        case replays
+        case clips
+    }
+
+    public init(
+        version: Int,
+        channelHandle: String,
+        avatarURL: URL? = nil,
+        lore: [LoreEntry],
+        replays: [ReplayVOD],
+        clips: [CuratedClip]
+    ) {
         self.version = version
         self.channelHandle = channelHandle
+        self.avatarURL = avatarURL
         self.lore = lore
         self.replays = replays
         self.clips = clips
