@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var popover = NSPopover()
     private var mainWindow: NSWindow?
     private var pollTimer: Timer?
+    private var flashTimer: Timer?
+    private var flashPhase = false
     private var cancellables: Set<AnyCancellable> = []
 
     override nonisolated init() {
@@ -76,11 +78,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateStatusButton(isLive: Bool) {
         guard let button = statusItem?.button else { return }
-        let symbolName = isLive ? "dot.radiowaves.left.and.right" : "sparkles"
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Caitlyn Momochi")
-        image?.isTemplate = true
-        button.image = image
-        button.contentTintColor = isLive ? .systemRed : nil
+        if isLive {
+            startFlashTimerIfNeeded()
+        } else {
+            stopFlashTimer()
+        }
+        MenuBarStatusView.configureStatusButton(button, isLive: isLive, flashPhase: flashPhase)
+    }
+
+    private func startFlashTimerIfNeeded() {
+        guard flashTimer == nil else { return }
+        flashPhase = false
+        let timer = Timer(timeInterval: 0.65, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let button = self.statusItem?.button else { return }
+                self.flashPhase.toggle()
+                MenuBarStatusView.configureStatusButton(
+                    button,
+                    isLive: self.watchlistService.isAnyLive,
+                    flashPhase: self.flashPhase
+                )
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        flashTimer = timer
+    }
+
+    private func stopFlashTimer() {
+        flashTimer?.invalidate()
+        flashTimer = nil
+        flashPhase = false
     }
 
     @objc private func togglePopover(_ sender: AnyObject?) {
@@ -137,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 self?.pollTimer?.invalidate()
                 self?.pollTimer = nil
+                self?.stopFlashTimer()
             }
         }
         center.addObserver(
@@ -147,6 +175,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 await self?.watchlistService.refreshAll()
                 await self?.liveService.refresh()
+                if let self {
+                    self.updateStatusButton(isLive: self.watchlistService.isAnyLive)
+                }
                 self?.startPollTimer()
             }
         }

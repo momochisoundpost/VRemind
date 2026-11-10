@@ -55,6 +55,36 @@ public struct MenuBarStatusView: View {
         WatchlistChannelCard.statusLine(status: status, lastStreamAt: lastStreamAt, now: now)
     }
 
+    @MainActor
+    public static func configureStatusButton(
+        _ button: NSStatusBarButton,
+        isLive: Bool,
+        flashPhase: Bool
+    ) {
+        if isLive {
+            let baseImage = NSImage(
+                systemSymbolName: "dot.radiowaves.left.and.right",
+                accessibilityDescription: "Caitlyn Momochi (Live)"
+            )
+            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+                .applying(NSImage.SymbolConfiguration(pointSize: 14, weight: .bold))
+            let tinted = baseImage?.withSymbolConfiguration(config) ?? baseImage
+            tinted?.isTemplate = false
+            button.image = tinted
+            button.contentTintColor = .systemRed
+            button.alphaValue = flashPhase ? 0.25 : 1.0
+        } else {
+            let image = NSImage(
+                systemSymbolName: "sparkles",
+                accessibilityDescription: "Caitlyn Momochi"
+            )
+            image?.isTemplate = true
+            button.image = image
+            button.contentTintColor = nil
+            button.alphaValue = 1.0
+        }
+    }
+
     public var body: some View {
         let channels = watchlistService.channels
         let config = configService.config

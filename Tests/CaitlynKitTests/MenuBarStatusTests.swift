@@ -74,4 +74,20 @@ struct MenuBarStatusTests {
         #expect(MenuBarStatusView.statusLine(status: .offline, lastStreamAt: nil, now: now)
                 == "Offline")
     }
+
+    @Test @MainActor func statusButtonRendersNonTemplateFlashingRedIconWhenLive() {
+        let button = NSStatusBarButton(frame: NSRect(x: 0, y: 0, width: 28, height: 22))
+
+        MenuBarStatusView.configureStatusButton(button, isLive: false, flashPhase: false)
+        #expect(button.image?.isTemplate == true)
+        #expect(button.alphaValue == 1.0)
+
+        MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: false)
+        #expect(button.image?.isTemplate == false)
+        #expect(button.alphaValue == 1.0)
+
+        MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: true)
+        #expect(button.image?.isTemplate == false)
+        #expect(button.alphaValue < 0.5)
+    }
 }
