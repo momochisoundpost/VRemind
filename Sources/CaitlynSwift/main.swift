@@ -1,5 +1,8 @@
 import AppKit
 import CaitlynKit
 
-// Placeholder entry point; replaced by the real app delegate in Task 6.
-NSApplication.shared.run()
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)
+app.run()
