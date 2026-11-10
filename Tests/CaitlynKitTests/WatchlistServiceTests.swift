@@ -107,4 +107,16 @@ struct WatchlistServiceTests {
         #expect(service.statuses["@kobokanaeru"]?.videoId == "live123")
         #expect(service.statuses["@kobokanaeru"]?.title == "Kobo Singing")
     }
+
+    @Test func refreshesBackfillMissingCustomChannelAvatar() async {
+        let htmlWithAvatar = """
+        <html><head><meta property="og:image" content="https://yt3.googleusercontent.com/kobo_avatar=s160-c-k-c0x00ffffff-no-rj"></head><body>ytInitialData</body></html>
+        """
+        let service = makeService { _ in htmlWithAvatar }
+        #expect(service.addChannel(name: "Kobo Kanaeru", handle: "@kobokanaeru", avatarURL: nil) == true)
+        #expect(service.channels[1].avatarURL == nil)
+
+        await service.refreshAll()
+        #expect(service.channels[1].avatarURL?.absoluteString == "https://yt3.googleusercontent.com/kobo_avatar=s160-c-k-c0x00ffffff-no-rj")
+    }
 }

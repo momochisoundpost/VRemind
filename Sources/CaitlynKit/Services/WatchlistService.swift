@@ -93,23 +93,27 @@ public final class WatchlistService: ObservableObject {
         let activeChannels = channels
         let fetcher = self.fetcher
 
-        let updates: [(String, LivePageResult?)] = await withTaskGroup(
-            of: (String, LivePageResult?).self
+        let updates: [(String, LivePageResult?, URL?)] = await withTaskGroup(
+            of: (String, LivePageResult?, URL?).self
         ) { group in
             for channel in activeChannels {
                 group.addTask {
                     guard let url = URL(string: "https://www.youtube.com/\(channel.handle)/live") else {
-                        return (channel.id, nil)
+                        return (channel.id, nil, nil)
                     }
                     do {
                         let html = try await fetcher(url)
-                        return (channel.id, LivePageParser.parse(html: html))
+                        return (
+                            channel.id,
+                            LivePageParser.parse(html: html),
+                            LivePageParser.extractAvatarURL(from: html)
+                        )
                     } catch {
-                        return (channel.id, nil)
+                        return (channel.id, nil, nil)
                     }
                 }
             }
-            var collected: [(String, LivePageResult?)] = []
+            var collected: [(String, LivePageResult?, URL?)] = []
             for await item in group {
                 collected.append(item)
             }
@@ -117,7 +121,14 @@ public final class WatchlistService: ObservableObject {
         }
 
         var nextStatuses = statuses
-        for (channelID, result) in updates {
+        var didUpdateAvatars = false
+        for (channelID, result, extractedAvatar) in updates {
+            if let extractedAvatar,
+               let idx = customChannels.firstIndex(where: { $0.id == channelID }),
+               customChannels[idx].avatarURL == nil {
+                customChannels[idx].avatarURL = extractedAvatar
+                didUpdateAvatars = true
+            }
             guard let result else { continue }
             switch result {
             case let .live(videoId, title, startedAt):
@@ -132,6 +143,9 @@ public final class WatchlistService: ObservableObject {
             case .unrecognized:
                 break
             }
+        }
+        if didUpdateAvatars {
+            saveCustomChannels()
         }
         self.statuses = nextStatuses
     }

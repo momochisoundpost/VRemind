@@ -43,6 +43,19 @@ public enum LivePageParser {
         return .unrecognized
     }
 
+    public static func extractAvatarURL(from html: String) -> URL? {
+        let prefix = "https://yt3.googleusercontent.com/"
+        guard let startRange = html.range(of: prefix) else {
+            return nil
+        }
+        let remainder = html[startRange.lowerBound...]
+        let endIdx = remainder.firstIndex { char in
+            char == "\"" || char == "'" || char == " " || char == ">" || char == "<" || char == "\\"
+        } ?? remainder.endIndex
+        let urlString = String(remainder[..<endIdx])
+        return URL(string: urlString)
+    }
+
     private static func extractPlayerResponseJSON(from html: String) -> String? {
         let marker = "ytInitialPlayerResponse = {"
         guard let markerRange = html.range(of: marker) else {
