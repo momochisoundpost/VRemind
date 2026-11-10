@@ -31,6 +31,10 @@ public struct WatchlistChannelCard: View {
         return "Offline"
     }
 
+    public static func actionButtonTitle(isLive: Bool) -> String {
+        isLive ? "Watch Stream ↗" : "Visit ↗"
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
@@ -88,7 +92,7 @@ public struct WatchlistChannelCard: View {
                 Button {
                     LinkOpener.open(status.watchURL(channelHandle: channel.handle))
                 } label: {
-                    Text("Watch Stream ↗")
+                    Text(Self.actionButtonTitle(isLive: status.isLive))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)

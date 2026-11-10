@@ -90,4 +90,19 @@ struct MenuBarStatusTests {
         #expect(button.image?.isTemplate == false)
         #expect(button.alphaValue < 0.5)
     }
+
+    @Test func cheatCodeTrackerMatchesJemariJembutBuffer() {
+        var tracker = CheatCodeTracker()
+        for ch in "randomjemarijembu" {
+            #expect(tracker.feed(String(ch)) == false)
+        }
+        #expect(tracker.feed("t") == true)
+        // Buffer resets after triggering so next char doesn't re-trigger
+        #expect(tracker.feed("t") == false)
+        // Case-insensitive match
+        for ch in "JEMARIJEMBU" {
+            #expect(tracker.feed(String(ch)) == false)
+        }
+        #expect(tracker.feed("T") == true)
+    }
 }

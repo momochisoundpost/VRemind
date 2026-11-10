@@ -19,4 +19,10 @@ struct WatchlistCardTests {
         #expect(AddChannelCard.buttonLabel(currentCount: 1) == "+ Add VTuber (1/3)")
         #expect(AddChannelCard.buttonLabel(currentCount: 2) == "+ Add VTuber (2/3)")
     }
+
+    @Test func actionButtonTitleShowsVisitWhenOfflineAndWatchStreamWhenLive() {
+        let liveStatus = StreamStatus(isLive: true, videoId: "v1", title: "Live", startedAt: nil)
+        #expect(WatchlistChannelCard.actionButtonTitle(isLive: liveStatus.isLive) == "Watch Stream ↗")
+        #expect(WatchlistChannelCard.actionButtonTitle(isLive: StreamStatus.offline.isLive) == "Visit ↗")
+    }
 }

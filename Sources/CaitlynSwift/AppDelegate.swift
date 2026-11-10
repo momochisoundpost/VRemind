@@ -117,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let view = popover.contentViewController?.view {
                 popover.contentSize = view.fittingSize
             }
+            NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

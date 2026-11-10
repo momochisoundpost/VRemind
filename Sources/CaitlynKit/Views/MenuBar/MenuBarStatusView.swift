@@ -8,6 +8,10 @@ public struct MenuBarStatusView: View {
     private let onQuit: () -> Void
     private let onLayoutChanged: (() -> Void)?
 
+    @State private var shakeTrigger: CGFloat = 0
+    @State private var easterEggStartDate: Date?
+    @State private var keyMonitor: Any?
+
     public init(
         configService: ConfigSyncService,
         watchlistService: WatchlistService,
@@ -177,5 +181,65 @@ public struct MenuBarStatusView: View {
         .padding(14)
         .frame(width: 320)
         .fixedSize(horizontal: false, vertical: true)
+        .modifier(ShakeEffect(shakes: shakeTrigger))
+        .overlay(
+            Group {
+                if let easterEggStartDate {
+                    EasterEggOverlayView(startDate: easterEggStartDate)
+                }
+            }
+        )
+        .clipped()
+        .onAppear {
+            startKeyMonitor()
+        }
+        .onDisappear {
+            stopKeyMonitor()
+        }
+    }
+
+    private func startKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        var tracker = CheatCodeTracker()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if let chars = event.charactersIgnoringModifiers, tracker.feed(chars) {
+                triggerEasterEgg(window: event.window)
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func stopKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+    }
+
+    private func triggerEasterEgg(window: NSWindow?) {
+        let now = Date()
+        easterEggStartDate = now
+        withAnimation(.easeInOut(duration: 0.55)) {
+            shakeTrigger += 5
+        }
+        if let window {
+            shakePopoverWindow(window)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+            if easterEggStartDate == now {
+                easterEggStartDate = nil
+            }
+        }
+    }
+
+    private func shakePopoverWindow(_ window: NSWindow) {
+        let origin = window.frame.origin
+        let offsets: [CGFloat] = [-10, 10, -8, 8, -6, 6, -3, 3, 0]
+        for (idx, dx) in offsets.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(idx) * 0.045) {
+                window.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y))
+            }
+        }
     }
 }
