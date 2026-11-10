@@ -16,7 +16,7 @@ public struct ReplayVOD: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var watchURL: URL {
-        URL(string: "https://www.youtube.com/watch?v=\(youtubeId)")!
+        LinkOpener.videoURL(for: youtubeId)
     }
 
     public var thumbnailURL: URL {
