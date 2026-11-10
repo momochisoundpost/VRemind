@@ -3,8 +3,8 @@ import Foundation
 
 @MainActor
 public final class WatchlistService: ObservableObject {
-    public static let maxSlots = 3
-    public static let userDefaultsKey = "caitlynswift.watched_channels"
+    public nonisolated static let maxSlots = 3
+    public nonisolated static let userDefaultsKey = "caitlynswift.watched_channels"
 
     @Published public private(set) var customChannels: [WatchedChannel] = []
     @Published public private(set) var statuses: [String: StreamStatus] = [:]
