@@ -21,6 +21,14 @@ struct ModelTests {
         #expect(try HubConfig.decode(from: seed.encoded()) == seed)
     }
 
+    @Test func decodesFractionalSecondDates() throws {
+        var json = String(decoding: try HubConfig.loadBundledSeed().encoded(), as: UTF8.self)
+        json = json.replacingOccurrences(of: "2026-11-05T12:00:00Z", with: "2026-11-05T12:00:00.250Z")
+        let config = try HubConfig.decode(from: Data(json.utf8))
+        let expected = try #require(ISO8601DateFormatter().date(from: "2026-11-05T12:00:00Z"))
+        #expect(config.latestReplayDate == expected.addingTimeInterval(0.25))
+    }
+
     @Test func replayURLs() throws {
         let seed = HubConfig.loadBundledSeed()
         let replay = try #require(seed.replays.first { $0.id == "kjiDlqyM-IE" })
