@@ -2,423 +2,258 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a native macOS desktop companion app for VTuber Caitlyn Momochi (@bukancaitlyn) featuring an ambient menu bar live checker, a stream archive shelf, a searchable Cait-pedia lore wiki, and a Clip Roulette spinner, with all links opening in the user's default browser.
+**Goal:** A native macOS 12+ companion app for VTuber Caitlyn Momochi (@bukancaitlyn): a menu bar live indicator plus a main window with Replays, Cait-pedia and Clip Roulette. Every link opens in the default browser.
 
-**Architecture:** A native Swift 6 / SwiftUI application with a dual surface: a lightweight `MenuBarExtra` status popover and a `WindowGroup` main hub. Content is driven by a hybrid model with bundled seed data (`caitlyn_hub.json`) that asynchronously syncs against a remote GitHub Raw JSON, with live YouTube broadcast detection.
+**Architecture:** Swift package with a `CaitlynKit` library (models, services, SwiftUI views) and a thin `CaitlynSwift` executable (AppKit shell: `NSStatusItem` + `NSPopover`, and an `NSWindow` hosting SwiftUI). The app starts from the bundled `caitlyn_hub.json`, then syncs a remote copy from GitHub Raw. Live status comes from parsing `youtube.com/@bukancaitlyn/live`.
 
-**Tech Stack:** macOS 14.0+, Swift 6.3+, SwiftUI, AppKit (`NSWorkspace`), Foundation (`URLSession`, `JSONDecoder`), Swift Testing / XCTest.
+**Tech Stack:** Swift 6.3 toolchain (Swift 5 language mode, tools-version 5.9), SwiftUI + AppKit, Foundation `URLSession`/`JSONDecoder`/`JSONSerialization`, Swift Testing. Only Xcode Command Line Tools are installed; there is no Xcode and no XCTest.
 
 **Spec:** `docs/superpowers/specs/2026-11-09-caitlyn-mac-companion-design.md`
 
 ## Global Constraints
-- Target platform is macOS 14.0+ (Sonoma / Sequoia) on both Apple Silicon and Intel.
-- 100% native Swift/SwiftUI; zero WebKit (`WKWebView`) or Electron dependencies to guarantee <50 MB RAM footprint and zero battery drain.
-- All external links (streams, VODs, clips) MUST open via `NSWorkspace.shared.open(_:)` in the system default browser.
-- No user-configured API keys or Google Cloud tokens required.
-- Soundboard and Tech Shed are explicitly excluded from this build.
+- Deployment target **macOS 12.0** (`platforms: [.macOS(.v12)]`). Do NOT use: `MenuBarExtra`, `NavigationSplitView`, `NavigationStack`, `openWindow`/`Window` scenes, `@Observable`, `Grid`, Swift `Regex` literals / `/.../` regex, `.scrollContentBackground`, or anything else marked macOS 13+. Use `ObservableObject`/`@Published`, `NavigationView`, `LazyVGrid`, `NSRegularExpression` or manual scanning.
+- 100% native; no WebKit, no Electron, no third-party packages.
+- All external links open via `NSWorkspace.shared.open(_:)` (through `LinkOpener`).
+- No user API keys. Soundboard and Tech Shed are out of scope.
+- **Build/test only through `scripts/test.sh`** (already committed). It handles the CLT `Testing.framework` paths and sandbox-safe caches; extra args pass through (`scripts/test.sh --filter ModelTests`). Plain `swift test` fails in this environment. For a build without tests, use the same env and flags that script sets, with `swift build`.
+- Tests use Swift Testing (`import Testing`, `@Test`, `#expect`), `@testable import CaitlynKit`.
+- Seed data `Sources/CaitlynKit/Resources/caitlyn_hub.json` is already committed with real content. Do not change its content; models must decode it as-is (ISO-8601 dates).
+- Remote config URL constant: `https://raw.githubusercontent.com/Y2Karyl/CaitlynSwift/main/caitlyn_hub.json`, and only in `AppConstants`.
+- Live poll interval: 180 seconds.
 
 ## Review Focus
-1. **Scheduled Stream False Positive**: YouTube channel `/live` redirecting to an upcoming waiting room video -> must verify `isLive == true` in parsed player response so scheduled streams do not trigger false "LIVE NOW" alerts.
-2. **Offline / Network Outage Fallback**: Launching without network or when GitHub Raw is unreachable -> must seamlessly load the bundled `caitlyn_hub.json` without UI lockup or crashes.
-3. **HTTP 429 / 500 Network Glitches**: `LiveStatusService` encountering rate limits or transport errors -> must retain the last verified `StreamStatus` and not flicker or crash.
-4. **Empty Clip Roulette**: Syncing a config where `clips` is empty -> Clip Roulette must disable the button and show a graceful fallback message instead of throwing an index out of bounds error.
-5. **Cait-pedia Search Special Characters**: Searching with regex characters (`[`, `*`, `\`) or empty strings in Cait-pedia -> must perform clean case-insensitive substring matching without crashing.
+1. **Scheduled waiting room**: `/live` resolves to an upcoming stream (`isUpcoming: true`, no `isLive: true`). It must count as not live. Owned by Task 3 test `scheduledStreamIsNotLive`.
+2. **Consent/garbage page or network error**: the fetch returns an unrecognized page or throws. The last known status must stay; no flicker to offline. Owned by Task 3 tests `unrecognizedPageKeepsPreviousStatus` and `fetchErrorKeepsPreviousStatus`.
+3. **Offline launch / bad remote JSON**: no network, HTTP 404, or remote JSON that doesn't decode. Keep the current config and leave the cache untouched. Owned by Task 2 tests.
+4. **Empty clips**: if the synced config has `clips: []`, Roulette shows a message and the button is disabled. No crash. Owned by Task 5 test `emptyClipsReturnsNil`.
+5. **Search input**: whitespace-only queries and regex metacharacters (`[`, `*`, `\`). Use plain case-insensitive substring matching. Owned by Task 5 tests.
 
 ---
 
-### Task 1: Swift Package Setup, Core Models & Seed Config
+### Task 1: Package, Models, Seed Loading
 
 **Files:**
 - Create: `Package.swift`
-- Create: `Sources/CaitlynSwift/Models/StreamStatus.swift`
-- Create: `Sources/CaitlynSwift/Models/LoreEntry.swift`
-- Create: `Sources/CaitlynSwift/Models/ReplayVOD.swift`
-- Create: `Sources/CaitlynSwift/Models/CuratedClip.swift`
-- Create: `Sources/CaitlynSwift/Models/HubConfig.swift`
-- Create: `Sources/CaitlynSwift/Resources/caitlyn_hub.json`
-- Create: `Tests/CaitlynSwiftTests/ModelTests.swift`
+- Create: `Sources/CaitlynKit/Models/StreamStatus.swift`, `LoreEntry.swift`, `ReplayVOD.swift`, `CuratedClip.swift`, `HubConfig.swift`, `ElapsedTime.swift`
+- Create: `Sources/CaitlynKit/AppConstants.swift`
+- Create: `Sources/CaitlynSwift/main.swift` (stub: `import AppKit; import CaitlynKit; NSApplication.shared.run()` is acceptable; Task 6 replaces it)
+- Test: `Tests/CaitlynKitTests/ModelTests.swift`
 
-**Interfaces:**
-- Produces:
-  - `struct StreamStatus: Sendable, Codable, Equatable`: `isLive: Bool`, `streamId: String?`, `title: String?`, `startedAt: Date?`, `lastStreamAt: Date?`
-  - `struct LoreEntry: Identifiable, Sendable, Codable, Equatable`: `id: String`, `title: String`, `category: String`, `summary: String`, `tags: [String]`
-  - `struct ReplayVOD: Identifiable, Sendable, Codable, Equatable`: `id: String`, `title: String`, `youtubeId: String`, `date: Date`, `duration: String`
-  - `struct CuratedClip: Identifiable, Sendable, Codable, Equatable`: `id: String`, `title: String`, `youtubeUrl: String`
-  - `struct HubConfig: Sendable, Codable, Equatable`: `version: Int`, `channelHandle: String`, `lore: [LoreEntry]`, `replays: [ReplayVOD]`, `clips: [CuratedClip]`
+**Interfaces (Produces):**
+- `Package.swift`: tools-version 5.9; `platforms: [.macOS(.v12)]`; library target `CaitlynKit` with `resources: [.process("Resources")]`; executable target `CaitlynSwift` depending on `CaitlynKit`; test target `CaitlynKitTests`.
+- `public struct LoreEntry: Codable, Equatable, Identifiable` (`id, title, category, summary: String`, `tags: [String]`)
+- `public struct ReplayVOD: Codable, Equatable, Identifiable` (`id, title, youtubeId: String`, `date: Date`, `duration: String`); `public var watchURL: URL` (`https://www.youtube.com/watch?v=<youtubeId>`); `public var thumbnailURL: URL` (`https://i.ytimg.com/vi/<youtubeId>/mqdefault.jpg`)
+- `public struct CuratedClip: Codable, Equatable, Identifiable` (`id, title, youtubeUrl: String`); `public var url: URL?`
+- `public struct HubConfig: Codable, Equatable` (`version: Int`, `channelHandle: String`, `lore: [LoreEntry]`, `replays: [ReplayVOD]`, `clips: [CuratedClip]`)
+  - `public static func decode(from data: Data) throws -> HubConfig` (ISO-8601 dates)
+  - `public func encoded() throws -> Data` (round-trips with `decode`)
+  - `public var latestReplayDate: Date?` (max replay date)
+  - `public static func bundledSeedURL() -> URL?`: first `Bundle.main.resourceURL/CaitlynSwift_CaitlynKit.bundle/caitlyn_hub.json` if it exists (the `.app` layout from Task 7), otherwise `Bundle.module.url(forResource: "caitlyn_hub", withExtension: "json")`
+  - `public static func loadBundledSeed() -> HubConfig` (decodes the seed; `fatalError` with a clear message if missing, since that's a packaging bug)
+- `public struct StreamStatus: Equatable` (`isLive: Bool`, `videoId: String?`, `title: String?`, `startedAt: Date?`); `public static let offline`; `public func watchURL(channelHandle: String) -> URL` (the video URL when live with an id, otherwise `https://www.youtube.com/<handle>/live`)
+- `public enum ElapsedTime { public static func short(from: Date, to: Date) -> String }`. Format: under 1h → `"42m"`; under 24h → `"2h 05m"`; otherwise `"3d 4h"`. Negative intervals clamp to `"0m"`.
+- `public enum AppConstants`: `channelHandle = "@bukancaitlyn"`, `remoteConfigURL: URL` (value in Global Constraints), `livePollInterval: TimeInterval = 180`
 
-- [ ] **Step 1: Write failing model decode & validation tests**
-
-```swift
-// Tests/CaitlynSwiftTests/ModelTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
-
-@Suite struct ModelTests {
-    @Test func testDecodeHubConfigFromSeedJSON() throws {
-        guard let url = Bundle.module.url(forResource: "caitlyn_hub.json", withExtension: nil) else {
-            Issue.record("caitlyn_hub.json missing from module resources")
-            return
-        }
-        let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let config = try decoder.decode(HubConfig.self, from: data)
-        #expect(config.channelHandle == "@bukancaitlyn")
-        #expect(!config.lore.isEmpty)
-        #expect(!config.replays.isEmpty)
-        #expect(!config.clips.isEmpty)
-    }
-
-    @Test func testStreamStatusUptimeCalculation() {
-        let now = Date()
-        let twoHoursAgo = now.addingTimeInterval(-7200)
-        let status = StreamStatus(isLive: true, streamId: "test123", title: "Live", startedAt: twoHoursAgo, lastStreamAt: nil)
-        #expect(status.uptimeString(relativeTo: now).contains("2h"))
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `swift test --filter ModelTests`  
-Expected: FAIL (missing package/models/resource)
-
-- [ ] **Step 3: Implement `Package.swift`, Models, and `caitlyn_hub.json`**
-
-Create `Package.swift` targeting macOS 14.0+, define models conforming to `Codable`, `Sendable`, `Identifiable`, and populate `caitlyn_hub.json` with initial Caitlyn lore (Witch era, Audio engineering, VTuber shift) and sample replays/clips.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test --filter ModelTests`  
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Package.swift Sources/ Tests/
-git commit -m "feat: setup package structure, core models, and seed JSON"
-```
+- [ ] **Step 1: Write failing tests** in `ModelTests.swift`:
+  - `seedDecodes`: `HubConfig.loadBundledSeed()` has `channelHandle == "@bukancaitlyn"`, `lore.count == 8`, `replays.count == 8`, `clips.count == 5`.
+  - `latestReplayDate`: equals `ISO8601DateFormatter().date(from: "2026-11-05T12:00:00Z")`.
+  - `roundTrip`: `HubConfig.decode(from: seed.encoded()) == seed`.
+  - `replayURLs`: replay with id `kjiDlqyM-IE` gives `watchURL.absoluteString == "https://www.youtube.com/watch?v=kjiDlqyM-IE"` and a thumbnail of `"https://i.ytimg.com/vi/kjiDlqyM-IE/mqdefault.jpg"`.
+  - `elapsedFormatting`: 42 min → `"42m"`; 2h5m → `"2h 05m"`; 3d4h → `"3d 4h"`; negative → `"0m"`.
+  - `watchURLFallsBackToLivePage`: `StreamStatus.offline.watchURL(channelHandle: "@bukancaitlyn").absoluteString == "https://www.youtube.com/@bukancaitlyn/live"`; a live status with `videoId "abc"` gives `"https://www.youtube.com/watch?v=abc"`.
+- [ ] **Step 2:** `scripts/test.sh --filter ModelTests` → FAIL (types missing)
+- [ ] **Step 3:** Implement the files above.
+- [ ] **Step 4:** `scripts/test.sh` → all pass; `swift build` of the executable succeeds (via test.sh's build).
+- [ ] **Step 5:** Commit `feat: package, models, and seed loading`
 
 ---
 
-### Task 2: Config Sync Service with Offline Fallback
+### Task 2: ConfigSyncService
 
 **Files:**
-- Create: `Sources/CaitlynSwift/Services/ConfigSyncService.swift`
-- Create: `Tests/CaitlynSwiftTests/ConfigSyncServiceTests.swift`
+- Create: `Sources/CaitlynKit/Services/ConfigSyncService.swift`
+- Test: `Tests/CaitlynKitTests/ConfigSyncServiceTests.swift`
 
 **Interfaces:**
-- Consumes: `HubConfig`
-- Produces:
-  - `@Observable final class ConfigSyncService: Sendable`
-  - `func loadInitial() -> HubConfig`
-  - `func sync(from url: URL) async throws -> HubConfig`
+- Consumes: `HubConfig.decode`, `encoded()`, `loadBundledSeed()`, `AppConstants.remoteConfigURL`
+- Produces: `@MainActor public final class ConfigSyncService: ObservableObject`
+  - `@Published public private(set) var config: HubConfig`
+  - `public init(cacheDirectory: URL, remoteURL: URL = AppConstants.remoteConfigURL, session: URLSession = .shared)`. Synchronously loads `cacheDirectory/caitlyn_hub.json` if it decodes, otherwise the bundled seed. Never throws.
+  - `public func sync() async`. Fetches `remoteURL`. If the response is an `HTTPURLResponse`, require status 200–299 (non-HTTP responses such as `file://` are accepted). Decode it; on success, write the cache atomically (create the directory if needed) and publish. On any failure, do nothing.
+  - `public static func defaultCacheDirectory() -> URL` (Application Support/`CaitlynSwift`)
 
-- [ ] **Step 1: Write failing tests for ConfigSyncService**
-
-```swift
-// Tests/CaitlynSwiftTests/ConfigSyncServiceTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
-
-@Suite struct ConfigSyncServiceTests {
-    @Test func testLoadInitialReturnsBundledSeedWhenNoCache() {
-        let service = ConfigSyncService()
-        let config = service.loadInitial()
-        #expect(config.channelHandle == "@bukancaitlyn")
-        #expect(config.lore.count > 0)
-    }
-
-    @Test func testSyncFallsBackToBundledOnNetworkError() async {
-        let service = ConfigSyncService()
-        let invalidURL = URL(string: "https://127.0.0.1:9999/nonexistent.json")!
-        let config = await service.syncWithFallback(from: invalidURL)
-        #expect(config.channelHandle == "@bukancaitlyn")
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `swift test --filter ConfigSyncServiceTests`  
-Expected: FAIL (`ConfigSyncService` not defined)
-
-- [ ] **Step 3: Implement `ConfigSyncService`**
-
-Implement `ConfigSyncService` using `URLSession.shared.data(from:)`, caching valid remote responses in `FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)` with instant fallback to `Bundle.module` seed.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test --filter ConfigSyncServiceTests`  
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Sources/CaitlynSwift/Services/ConfigSyncService.swift Tests/CaitlynSwiftTests/ConfigSyncServiceTests.swift
-git commit -m "feat: implement ConfigSyncService with offline fallback"
-```
+- [ ] **Step 1: Write failing tests** (each uses a fresh temp dir):
+  - `loadsSeedWhenNoCache`: `config == HubConfig.loadBundledSeed()`
+  - `prefersValidCache`: write a seed copy with `version = 99` to the cache file → `config.version == 99`
+  - `corruptCacheFallsBackToSeed`: cache file containing `"not json"` → `config.version == 1`
+  - `syncFromFileURLUpdatesAndCaches`: remote = `file://` temp JSON with `version = 7` → after `await sync()`, `config.version == 7` and the cache file decodes to version 7
+  - `syncFailureKeepsConfigAndCache`: remote = `http://127.0.0.1:9/none.json` → config unchanged, cache file not created
+  - `syncInvalidJSONKeepsConfig`: remote = `file://` with `{"oops":1}` → config unchanged
+- [ ] **Step 2:** `scripts/test.sh --filter ConfigSyncServiceTests` → FAIL
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** `scripts/test.sh` → all pass
+- [ ] **Step 5:** Commit `feat: config sync with cache and offline fallback`
 
 ---
 
-### Task 3: YouTube Live Status Service
+### Task 3: Live Status Parsing and Service
 
 **Files:**
-- Create: `Sources/CaitlynSwift/Services/LiveStatusService.swift`
-- Create: `Tests/CaitlynSwiftTests/LiveStatusServiceTests.swift`
+- Create: `Sources/CaitlynKit/Services/LivePageParser.swift`
+- Create: `Sources/CaitlynKit/Services/LiveStatusService.swift`
+- Test: `Tests/CaitlynKitTests/LiveStatusTests.swift`
 
 **Interfaces:**
-- Consumes: `StreamStatus`
+- Consumes: `StreamStatus`, `AppConstants`
 - Produces:
-  - `@Observable final class LiveStatusService: Sendable`
-  - `func parseLivePayload(html: String) -> (isLive: Bool, title: String?, videoId: String?, startedAt: Date?)`
-  - `func checkLiveStatus(channelHandle: String) async -> StreamStatus`
+  - `public enum LivePageResult: Equatable { case live(videoId: String, title: String, startedAt: Date?); case notLive; case unrecognized }`
+  - `public enum LivePageParser { public static func parse(html: String) -> LivePageResult }`. Rules:
+    1. Find `ytInitialPlayerResponse = {`, extract the balanced JSON object by brace counting that respects JSON strings and escapes, then parse it with `JSONSerialization`.
+    2. `.live` only if `videoDetails.isLive == true`, or `microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow == true`, **and** `videoDetails.isUpcoming != true`. `videoId`/`title` come from `videoDetails`. `startedAt` comes from `liveBroadcastDetails.startTimestamp` (ISO-8601, which may include fractional seconds or `+00:00`), otherwise nil.
+    3. If a player response exists but isn't live → `.notLive`.
+    4. No player response, but the HTML contains `ytInitialData` (a normal channel page) → `.notLive`.
+    5. Anything else (consent page, empty, malformed JSON) → `.unrecognized`.
+  - `@MainActor public final class LiveStatusService: ObservableObject`
+    - `@Published public private(set) var status: StreamStatus` (starts `.offline`)
+    - `public typealias Fetcher = @Sendable (URL) async throws -> String`
+    - `public init(channelHandle: String = AppConstants.channelHandle, fetcher: Fetcher? = nil)`. The default fetcher uses `URLSession` with a desktop Safari `User-Agent` and `Accept-Language: en-US,en` on `https://www.youtube.com/<handle>/live`.
+    - `public func refresh() async`: `.live` → set live status; `.notLive` → `.offline`; `.unrecognized` or a thrown error → keep the current status.
 
-- [ ] **Step 1: Write failing parser tests for live vs scheduled detection**
-
-```swift
-// Tests/CaitlynSwiftTests/LiveStatusServiceTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
-
-@Suite struct LiveStatusServiceTests {
-    @Test func testParseActiveLiveStream() {
-        let liveHTML = """
-        <script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":true,"title":"Hackintosh & Chat","videoId":"live123"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"startTimestamp":"2026-11-09T20:00:00Z"}}}};<\/script>
-        """
-        let service = LiveStatusService()
-        let parsed = service.parseLivePayload(html: liveHTML)
-        #expect(parsed.isLive == true)
-        #expect(parsed.videoId == "live123")
-        #expect(parsed.title == "Hackintosh & Chat")
-        #expect(parsed.startedAt != nil)
-    }
-
-    @Test func testParseScheduledWaitingRoomIsNotLive() {
-        let scheduledHTML = """
-        <script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":false,"title":"Upcoming Stream","videoId":"sched456"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false}}}};<\/script>
-        """
-        let service = LiveStatusService()
-        let parsed = service.parseLivePayload(html: scheduledHTML)
-        #expect(parsed.isLive == false)
-    }
-
-    @Test func testParseOfflineChannelPage() {
-        let offlineHTML = "<html><body>Channel home</body></html>"
-        let service = LiveStatusService()
-        let parsed = service.parseLivePayload(html: offlineHTML)
-        #expect(parsed.isLive == false)
-        #expect(parsed.videoId == nil)
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `swift test --filter LiveStatusServiceTests`  
-Expected: FAIL (`LiveStatusService` not defined)
-
-- [ ] **Step 3: Implement `LiveStatusService`**
-
-Implement `parseLivePayload(html:)` using regex extraction of `ytInitialPlayerResponse` to detect `isLive` / `isLiveNow`, title, videoId, and startTimestamp; implement `checkLiveStatus(channelHandle:)` with `URLSession` fetching `https://www.youtube.com/@\(handle)/live`.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test --filter LiveStatusServiceTests`  
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Sources/CaitlynSwift/Services/LiveStatusService.swift Tests/CaitlynSwiftTests/LiveStatusServiceTests.swift
-git commit -m "feat: implement LiveStatusService with active broadcast detection"
-```
+- [ ] **Step 1: Write failing tests** with HTML fixture strings built inline:
+  - `activeLiveStream`: `isLive: true`, title `"Hackintosh & Chat"`, videoId `"live123"`, startTimestamp `"2026-11-09T20:00:00+00:00"` → `.live("live123", "Hackintosh & Chat", <that date>)`
+  - `braceInsideStringDoesNotBreakExtraction`: title `"a } tricky { title"` → parses as live with that title
+  - `scheduledStreamIsNotLive`: `isUpcoming: true`, `isLiveContent: true`, no `isLive` → `.notLive`
+  - `endedStreamIsNotLive`: `isLive` absent, `isLiveContent: true` → `.notLive`
+  - `channelPageIsNotLive`: `"<script>var ytInitialData = {};</script>"` → `.notLive`
+  - `consentPageIsUnrecognized`: `"<html>Before you continue to YouTube</html>"` → `.unrecognized`
+  - Service tests with a stub fetcher: live HTML → `status.isLive == true`, with videoId set; then `unrecognizedPageKeepsPreviousStatus` (still live); `fetchErrorKeepsPreviousStatus` (stub throws → still live); then channel-page HTML → `status == .offline`
+- [ ] **Step 2:** `scripts/test.sh --filter LiveStatusTests` → FAIL
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** `scripts/test.sh` → all pass
+- [ ] **Step 5:** Commit `feat: YouTube live status parser and service`
 
 ---
 
-### Task 4: Reusable UI Components & External URL Opener
+### Task 4: Theme, LinkOpener, Reusable Components
 
 **Files:**
-- Create: `Sources/CaitlynSwift/Views/Components/StatusBadge.swift`
-- Create: `Sources/CaitlynSwift/Views/Components/VODCard.swift`
-- Create: `Sources/CaitlynSwift/Views/Components/LoreCard.swift`
-- Create: `Sources/CaitlynSwift/Utilities/LinkOpener.swift`
-- Create: `Tests/CaitlynSwiftTests/LinkOpenerTests.swift`
+- Create: `Sources/CaitlynKit/Utilities/LinkOpener.swift`
+- Create: `Sources/CaitlynKit/Views/Theme.swift`
+- Create: `Sources/CaitlynKit/Views/Components/StatusBadge.swift`, `VODCard.swift`, `LoreCard.swift`
+- Test: `Tests/CaitlynKitTests/LinkOpenerTests.swift`
 
-**Interfaces:**
-- Produces:
-  - `struct LinkOpener`: `static func openYouTubeVideo(id: String) -> Bool`, `static func openURL(_ url: URL) -> Bool`
-  - `struct StatusBadge: View`: Renders animated green/red pulsing dot with "LIVE NOW" or "OFFLINE"
-  - `struct VODCard: View`: Thumbnail image, title, date, duration, and click-to-open action
-  - `struct LoreCard: View`: Title, category badge, expandable summary, tag pills
+**Interfaces (Produces):**
+- `public enum LinkOpener { public static func videoURL(for youtubeId: String) -> URL; public static func open(_ url: URL) }`. `open` calls `NSWorkspace.shared.open`. `ReplayVOD.watchURL` should use `videoURL(for:)` so the format is defined once (refactor Task 1's implementation to call it).
+- `public enum Theme`: `accent` (Caitlyn purple, e.g. `Color(red: 0.62, green: 0.36, blue: 0.95)`), `live` (red). Use system colors elsewhere so light and dark mode both work.
+- `public struct StatusBadge: View` (`init(isLive: Bool)`). Pill reading `"LIVE NOW"` with a pulsing red dot, or `"OFFLINE"` in secondary color.
+- `public struct VODCard: View` (`init(replay: ReplayVOD)`). `AsyncImage` 16:9 thumbnail with a placeholder, a 2-line title, and `date` (abbreviated) • `duration`. The whole card is a plain-style button that opens `replay.watchURL` via `LinkOpener`.
+- `public struct LoreCard: View` (`init(entry: LoreEntry)`). Title, category capsule, and summary (collapsed to 2 lines; click toggles expansion), plus tag chips.
 
-- [ ] **Step 1: Write test for LinkOpener URL construction**
-
-```swift
-// Tests/CaitlynSwiftTests/LinkOpenerTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
-
-@Suite struct LinkOpenerTests {
-    @Test func testYouTubeVideoURLGeneration() {
-        let url = LinkOpener.videoURL(for: "dQw4w9WgXcQ")
-        #expect(url.absoluteString == "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `swift test --filter LinkOpenerTests`  
-Expected: FAIL
-
-- [ ] **Step 3: Implement `LinkOpener` and SwiftUI component views**
-
-Implement `LinkOpener` with `NSWorkspace.shared.open(url)`, and construct SwiftUI components `StatusBadge`, `VODCard`, and `LoreCard` with macOS native typography and Caitlyn's purple-themed accents.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test --filter LinkOpenerTests`  
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Sources/CaitlynSwift/Views/Components/ Sources/CaitlynSwift/Utilities/ Tests/CaitlynSwiftTests/LinkOpenerTests.swift
-git commit -m "feat: add StatusBadge, VODCard, LoreCard, and LinkOpener"
-```
+- [ ] **Step 1: Write failing test** `videoURLFormat`: `LinkOpener.videoURL(for: "42hstxcifYU").absoluteString == "https://www.youtube.com/watch?v=42hstxcifYU"`
+- [ ] **Step 2:** `scripts/test.sh --filter LinkOpenerTests` → FAIL
+- [ ] **Step 3:** Implement. Views must compile against macOS 12 (watch for 13+ modifiers).
+- [ ] **Step 4:** `scripts/test.sh` → all pass, no availability errors
+- [ ] **Step 5:** Commit `feat: link opener, theme, and reusable components`
 
 ---
 
-### Task 5: Main Hub Views (Replays, Cait-pedia, Clip Roulette, Split Container)
+### Task 5: Main Hub Views
 
 **Files:**
-- Create: `Sources/CaitlynSwift/Views/Main/ReplaysView.swift`
-- Create: `Sources/CaitlynSwift/Views/Main/CaitPediaView.swift`
-- Create: `Sources/CaitlynSwift/Views/Main/ClipRouletteView.swift`
-- Create: `Sources/CaitlynSwift/Views/Main/MainHubView.swift`
-- Create: `Tests/CaitlynSwiftTests/LoreSearchTests.swift`
+- Create: `Sources/CaitlynKit/Views/Main/ReplaysView.swift`, `CaitPediaView.swift`, `ClipRouletteView.swift`, `MainHubView.swift`
+- Test: `Tests/CaitlynKitTests/HubLogicTests.swift`
 
 **Interfaces:**
-- Consumes: `HubConfig`, `LoreEntry`, `ReplayVOD`, `CuratedClip`, `LinkOpener`
+- Consumes: `HubConfig`, `LoreEntry`, `ReplayVOD`, `CuratedClip`, `StreamStatus`, `ElapsedTime`, `LinkOpener`, `StatusBadge`, `VODCard`, `LoreCard`, `ConfigSyncService`, `LiveStatusService`
 - Produces:
-  - `struct CaitPediaView: View`: Searchable list of lore with category filter picker
-  - `struct ReplaysView: View`: Grid of `VODCard` items
-  - `struct ClipRouletteView: View`: Interactive random clip picker button with rolling animation
-  - `struct MainHubView: View`: `NavigationSplitView` with sidebar selecting between Live/Replays, Cait-pedia, and Clip Roulette
+  - `CaitPediaView` (`init(entries: [LoreEntry])`). Search field (`.searchable` or a `TextField`) and a category picker (an "All" option plus categories).
+    - `static func filter(entries: [LoreEntry], query: String, category: String?) -> [LoreEntry]`: trim the query; an empty query matches everything. Otherwise do case- and diacritic-insensitive substring matching (`range(of:options:)`, not regex) over title, summary and tags. Preserve the input order.
+    - `static func categories(in entries: [LoreEntry]) -> [String]`: unique categories in first-appearance order
+  - `ReplaysView` (`init(status: StreamStatus, channelHandle: String, replays: [ReplayVOD])`). A live banner at the top: when live, show `StatusBadge`, the title and a "Watch Live ↗" button; when offline, show "Offline". Below it, a `LazyVGrid` (adaptive, min 220) of `VODCard`s sorted newest first.
+    - `static func sorted(_ replays: [ReplayVOD]) -> [ReplayVOD]` (date descending)
+  - `ClipRouletteView` (`init(clips: [CuratedClip])`). A big "Spin" button that briefly cycles titles (~1s animation), lands on a pick, and shows it with an "Open ↗" button. With empty clips, show "No clips yet" and disable the button.
+    - `static func pickRandomClip<G: RandomNumberGenerator>(from clips: [CuratedClip], excluding lastId: String?, using generator: inout G) -> CuratedClip?`: nil if empty; never returns `lastId` when more than one clip exists
+  - `public enum HubSection: String, CaseIterable, Identifiable { case replays, caitpedia, roulette }`. Labels/symbols: "Live & Replays" `play.rectangle`, "Cait-pedia" `book`, "Clip Roulette" `dice`.
+  - `public struct MainHubView: View` (`init(configService: ConfigSyncService, liveService: LiveStatusService)`). Both are `@ObservedObject`. Uses a `NavigationView` with a sidebar `List` (`.listStyle(.sidebar)`) of `HubSection`, with `replays` selected initially, and a detail area showing the chosen view. Minimum frame 820×560.
 
-- [ ] **Step 1: Write failing tests for lore search and clip roulette selection logic**
-
-```swift
-// Tests/CaitlynSwiftTests/LoreSearchTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
-
-@Suite struct LoreSearchTests {
-    @Test func testLoreSearchFiltering() {
-        let entries = [
-            LoreEntry(id: "1", title: "Retired Witch", category: "Lore", summary: "Used to cast spells", tags: ["witch"]),
-            LoreEntry(id: "2", title: "OpenCore", category: "Tech", summary: "Bootloader for Hackintosh", tags: ["tech"])
-        ]
-        let filtered = CaitPediaView.filter(entries: entries, query: "witch", category: nil)
-        #expect(filtered.count == 1)
-        #expect(filtered.first?.id == "1")
-    }
-
-    @Test func testClipRoulettePicksElement() {
-        let clips = [
-            CuratedClip(id: "1", title: "Funny Moment", youtubeUrl: "https://youtu.be/1"),
-            CuratedClip(id: "2", title: "Epic Win", youtubeUrl: "https://youtu.be/2")
-        ]
-        let picked = ClipRouletteView.pickRandomClip(from: clips)
-        #expect(picked != nil)
-        #expect(clips.contains(where: { $0.id == picked?.id }))
-    }
-
-    @Test func testClipRouletteEmptyListReturnsNil() {
-        let empty: [CuratedClip] = []
-        let picked = ClipRouletteView.pickRandomClip(from: empty)
-        #expect(picked == nil)
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `swift test --filter LoreSearchTests`  
-Expected: FAIL
-
-- [ ] **Step 3: Implement `ReplaysView`, `CaitPediaView`, `ClipRouletteView`, and `MainHubView`**
-
-Implement views using SwiftUI `NavigationSplitView`, `@State` search query, and animated clip picker.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test --filter LoreSearchTests`  
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Sources/CaitlynSwift/Views/Main/ Tests/CaitlynSwiftTests/LoreSearchTests.swift
-git commit -m "feat: implement ReplaysView, CaitPediaView, ClipRouletteView, and MainHubView"
-```
+- [ ] **Step 1: Write failing tests**:
+  - `filterByQuery`: query `"WITCH"` over the seed lore → every result's title, summary or tags contain "witch" case-insensitively, and the count is ≥ 3
+  - `whitespaceQueryReturnsAll`: `"   "` → all 8
+  - `regexCharactersAreLiteral`: `"[*\\"` → empty, no crash
+  - `filterByCategory`: category `"Chat Memes"`, empty query → 2 entries
+  - `categoriesInOrder`: seed → `["Witch Era", "Audio Engineer Era", "VTuber Shenanigans", "Chat Memes"]`
+  - `replaysSortedNewestFirst`: the first item is `S-rjK_FwjMU` and the last is `PGzo5C_3rdQ`
+  - `emptyClipsReturnsNil`: `pickRandomClip(from: [], excluding: nil, using: &rng) == nil`
+  - `neverRepeatsLastWhenPossible`: 2 clips, exclude `"a"`, 50 iterations with `SystemRandomNumberGenerator` → always `"b"`
+  - `singleClipCanRepeat`: 1 clip, exclude its own id → returns it
+- [ ] **Step 2:** `scripts/test.sh --filter HubLogicTests` → FAIL
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** `scripts/test.sh` → all pass
+- [ ] **Step 5:** Commit `feat: replays, cait-pedia, clip roulette, and main hub`
 
 ---
 
-### Task 6: Menu Bar Popover, App Lifecycle & AppKit Integration
+### Task 6: Menu Bar Popover and AppKit Shell
 
 **Files:**
-- Create: `Sources/CaitlynSwift/Views/MenuBar/MenuBarStatusView.swift`
-- Create: `Sources/CaitlynSwift/CaitlynSwiftApp.swift`
-- Create: `Sources/CaitlynSwift/AppState.swift`
+- Create: `Sources/CaitlynKit/Views/MenuBar/MenuBarStatusView.swift`
+- Create: `Sources/CaitlynSwift/AppDelegate.swift`
+- Modify: `Sources/CaitlynSwift/main.swift`
+- Test: `Tests/CaitlynKitTests/MenuBarStatusTests.swift`
 
 **Interfaces:**
-- Consumes: `LiveStatusService`, `ConfigSyncService`, `StreamStatus`, `HubConfig`, `MainHubView`
+- Consumes: everything above
 - Produces:
-  - `@Observable final class AppState: Sendable`: Coordinates live polling timer, config updates, and window presentation
-  - `struct MenuBarStatusView: View`: Popover showing live status card, uptime, "Watch Stream ↗", and "Open Full App" button
-  - `@main struct CaitlynSwiftApp: App`: SwiftUI `MenuBarExtra` and `WindowGroup` entry point
+  - `public struct MenuBarStatusView: View` (`init(configService:liveService:onOpenHub: @escaping () -> Void, onQuit: @escaping () -> Void)`). About 320pt wide. It contains:
+    - a header ("Caitlyn Momochi" plus `@bukancaitlyn`, with `StatusBadge`)
+    - a stream card (title when live, and the status line)
+    - "Watch Stream ↗" (`LinkOpener.open(status.watchURL(channelHandle:))`)
+    - "Open Full App" and "Quit"
+    - The status line refreshes every 60s (`TimelineView(.periodic(from:by:))` is macOS 12+).
+    - `static func statusLine(status: StreamStatus, lastStreamAt: Date?, now: Date) -> String`:
+      - live with `startedAt` → `"Live for " + ElapsedTime.short(from: startedAt, to: now)`
+      - live without `startedAt` → `"Live now"`
+      - offline with `lastStreamAt` → `"Last stream " + ElapsedTime.short(...) + " ago"`
+      - otherwise → `"Offline"`
+  - `AppDelegate: NSObject, NSApplicationDelegate` (executable target):
+    - Owns `ConfigSyncService(cacheDirectory: .defaultCacheDirectory())` and `LiveStatusService()`.
+    - Creates an `NSStatusItem` (variable length). Its button image is the SF Symbol `sparkles`, as a template image, when offline. When live it is `dot.radiowaves.left.and.right` with `contentTintColor = .systemRed`. Update it by observing `liveService.$status` (Combine `sink`).
+    - Clicking the button toggles an `NSPopover` (`.transient`) that hosts `MenuBarStatusView` in an `NSHostingController`.
+    - "Open Full App" closes the popover and shows one reused `NSWindow` (titled "Caitlyn Momochi", `NSHostingView(rootView: MainHubView(...))`, centered, `isReleasedWhenClosed = false`), then calls `NSApp.activate(ignoringOtherApps: true)`.
+    - On launch, call `Task { await configService.sync() }` and `await liveService.refresh()`, then start a 180s repeating `Timer` that refreshes live status.
+    - Invalidate the timer on `NSWorkspace.screensDidSleepNotification`. On `screensDidWakeNotification`, refresh immediately and restart the timer.
+  - `main.swift`: `let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.setActivationPolicy(.accessory); app.run()`
 
-- [ ] **Step 1: Write integration test for AppState synchronization**
+- [ ] **Step 1: Write failing tests** for `statusLine` (fixed `now`):
+  - live, started 1h42m earlier → `"Live for 1h 42m"`
+  - live, `startedAt` nil → `"Live now"`
+  - offline, last stream 4d2h earlier → `"Last stream 4d 2h ago"`
+  - offline, nil → `"Offline"`
+- [ ] **Step 2:** `scripts/test.sh --filter MenuBarStatusTests` → FAIL
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** `scripts/test.sh` → all pass, and the `CaitlynSwift` executable builds
+- [ ] **Step 5:** Commit `feat: menu bar popover and AppKit app shell`
 
-```swift
-// Tests/CaitlynSwiftTests/AppStateTests.swift
-import Testing
-import Foundation
-@testable import CaitlynSwift
+---
 
-@Suite struct AppStateTests {
-    @Test func testInitialStateLoadsSeedConfig() {
-        let appState = AppState()
-        #expect(appState.config.channelHandle == "@bukancaitlyn")
-        #expect(!appState.config.lore.isEmpty)
-    }
-}
-```
+### Task 7: `.app` Bundle Script
 
-- [ ] **Step 2: Run test to verify it fails**
+**Files:**
+- Create: `scripts/build-app.sh`
+- Create: `Resources/Info.plist` (template)
+- Modify: `README.md` (create it: what the app is, `scripts/test.sh`, `scripts/build-app.sh`, how to edit `caitlyn_hub.json`, and the remote URL to publish)
 
-Run: `swift test --filter AppStateTests`  
-Expected: FAIL
+**Interfaces (Produces):** `scripts/build-app.sh` → `build/CaitlynSwift.app`
+- Use the same sandbox-safe env/flags as `scripts/test.sh`. Run `swift build -c release`.
+- Try a universal binary: build with `--triple arm64-apple-macosx12.0` and `--triple x86_64-apple-macosx12.0`, then `lipo -create`. If either cross build fails, fall back to the host-arch binary and print a clear warning. Don't fail the script for that.
+- Layout:
+  - `Contents/MacOS/CaitlynSwift`
+  - `Contents/Info.plist`
+  - `Contents/Resources/CaitlynSwift_CaitlynKit.bundle` (copied from the build dir). This matches `HubConfig.bundledSeedURL()`'s first lookup.
+- Info.plist values: `CFBundleIdentifier` `com.y2karyl.caitlynswift`, `CFBundleName`/`CFBundleDisplayName` `Caitlyn Companion`, `CFBundleExecutable` `CaitlynSwift`, `CFBundlePackageType` `APPL`, `CFBundleShortVersionString` `1.0.0`, `CFBundleVersion` `1`, `LSMinimumSystemVersion` `12.0`, `LSUIElement` `true`, `NSHighResolutionCapable` `true`.
+- Ad-hoc sign: `codesign --force --deep --sign - build/CaitlynSwift.app`.
 
-- [ ] **Step 3: Implement `AppState`, `MenuBarStatusView`, and `CaitlynSwiftApp`**
-
-Implement `AppState` with periodic timer (every 180s) checking live status, `MenuBarStatusView` popover with direct action to open stream in default browser, and `@main` app with `MenuBarExtra("Caitlyn", systemImage: ...)` and `WindowGroup(id: "main-hub")`.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `swift test`  
-Expected: ALL PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Sources/CaitlynSwift/ AppState.swift CaitlynSwiftApp.swift Tests/
-git commit -m "feat: implement AppState, MenuBarStatusView, and app entry point"
-```
+- [ ] **Step 1:** Write the script and plist.
+- [ ] **Step 2:** Run `scripts/build-app.sh`. Expected: it exits 0; `plutil -lint build/CaitlynSwift.app/Contents/Info.plist` reports OK; `file build/CaitlynSwift.app/Contents/MacOS/CaitlynSwift` lists the arch(es); `build/CaitlynSwift.app/Contents/Resources/CaitlynSwift_CaitlynKit.bundle/caitlyn_hub.json` exists (the `.process` rule may flatten it; adjust `bundledSeedURL()` to the actual layout if it differs and add a test); `codesign --verify build/CaitlynSwift.app` passes.
+- [ ] **Step 3:** `scripts/test.sh` still passes.
+- [ ] **Step 4:** Commit `build: app bundle script and README`

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "channelHandle": "@bukancaitlyn",
+  "lore": [
+    {
+      "id": "retired-witch",
+      "title": "The Retired Witch",
+      "category": "Witch Era",
+      "summary": "Before anything else, Caitlyn was a witch. They retired from witchcraft, though the magic never fully left.",
+      "tags": ["origin", "witch"]
+    },
+    {
+      "id": "audio-engineer",
+      "title": "Audio Engineer Pivot",
+      "category": "Audio Engineer Era",
+      "summary": "After retiring, the witch switched careers to audio engineering. That's why the mic always sounds suspiciously good.",
+      "tags": ["origin", "audio"]
+    },
+    {
+      "id": "anime-gepeng",
+      "title": "Becoming an Anime Gepeng",
+      "category": "VTuber Shenanigans",
+      "summary": "Then came another pivot: becoming a flat anime girl (a VTuber), mostly out of boredom (gabut).",
+      "tags": ["origin", "vtuber"]
+    },
+    {
+      "id": "bukan-caitlyn",
+      "title": "@bukancaitlyn",
+      "category": "VTuber Shenanigans",
+      "summary": "The YouTube handle literally means \"not Caitlyn\". Caitlyn also posts on X as @Y2Karyl.",
+      "tags": ["handle", "youtube", "x"]
+    },
+    {
+      "id": "witcheel-comeback",
+      "title": "Back From Retirement",
+      "category": "Witch Era",
+      "summary": "The Witcheel stream: \"I'm back from retirement, now what?\" The witch returns, sort of.",
+      "tags": ["witch", "stream"]
+    },
+    {
+      "id": "keyboard-warrior-witch",
+      "title": "Penyihir Jalur Keyboard Warrior",
+      "category": "Chat Memes",
+      "summary": "During TypeCaster, Caitlyn became a witch who casts spells by typing. A keyboard-warrior witch.",
+      "tags": ["witch", "typecaster", "meme"]
+    },
+    {
+      "id": "mac-mini-2009",
+      "title": "The Mac mini 2009",
+      "category": "VTuber Shenanigans",
+      "summary": "A 2009 Mac mini that Caitlyn put macOS Tahoe on in TECH TALK streams. Is it usable? There was also talk of overclocking it.",
+      "tags": ["tech", "macos", "opencore"]
+    },
+    {
+      "id": "guerilla-freetalk",
+      "title": "Guerilla Freetalk",
+      "category": "Chat Memes",
+      "summary": "Surprise free-talk streams that show up with little warning. Check the menu bar.",
+      "tags": ["stream", "freetalk"]
+    }
+  ],
+  "replays": [
+    { "id": "S-rjK_FwjMU", "title": "【Fall, Fall, Fall For You】berisik, gw mau mendaki", "youtubeId": "S-rjK_FwjMU", "date": "2026-11-05T12:00:00Z", "duration": "1:12:39" },
+    { "id": "NA1TtRr68jg", "title": "【City Pixel Transporters】i like trains", "youtubeId": "NA1TtRr68jg", "date": "2026-10-29T12:00:00Z", "duration": "1:25:00" },
+    { "id": "kjiDlqyM-IE", "title": "TECH TALK - macOS Tahoe di Mac mini 2009, apakah usable?", "youtubeId": "kjiDlqyM-IE", "date": "2026-10-28T12:00:00Z", "duration": "1:57:22" },
+    { "id": "WUvqWwAml2U", "title": "TECH TALK - menginstall macOS Tahoe di Mac mini 2009", "youtubeId": "WUvqWwAml2U", "date": "2026-10-27T12:00:00Z", "duration": "4:47:31" },
+    { "id": "I4b2mJP3N0E", "title": "FREETALK - unboxing paket barang mahal dan mewah di era krisis AI", "youtubeId": "I4b2mJP3N0E", "date": "2026-10-19T12:00:00Z", "duration": "1:59:33" },
+    { "id": "4SrTMyUgrpk", "title": "【TypeCaster】PENYIHIR JALUR KEYBOARD WARRIOR CHECK", "youtubeId": "4SrTMyUgrpk", "date": "2026-10-05T12:00:00Z", "duration": "1:11:57" },
+    { "id": "42hstxcifYU", "title": "【Witcheel】I'm back from retirement, now what?", "youtubeId": "42hstxcifYU", "date": "2026-09-09T12:00:00Z", "duration": "1:34:21" },
+    { "id": "PGzo5C_3rdQ", "title": "a quick life update — answering my letter from the past", "youtubeId": "PGzo5C_3rdQ", "date": "2026-07-09T12:00:00Z", "duration": "2:12:41" }
+  ],
+  "clips": [
+    { "id": "clip-witcheel", "title": "The witch is back from retirement", "youtubeUrl": "https://www.youtube.com/watch?v=42hstxcifYU" },
+    { "id": "clip-typecaster", "title": "Keyboard warrior witch check", "youtubeUrl": "https://www.youtube.com/watch?v=4SrTMyUgrpk" },
+    { "id": "clip-macmini", "title": "Can a 2009 Mac mini run Tahoe?", "youtubeUrl": "https://www.youtube.com/watch?v=kjiDlqyM-IE" },
+    { "id": "clip-trains", "title": "i like trains", "youtubeUrl": "https://www.youtube.com/watch?v=NA1TtRr68jg" },
+    { "id": "clip-letter", "title": "Answering a letter from the past", "youtubeUrl": "https://www.youtube.com/watch?v=PGzo5C_3rdQ" }
+  ]
+}

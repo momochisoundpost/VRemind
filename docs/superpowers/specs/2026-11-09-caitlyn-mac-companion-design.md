@@ -2,8 +2,8 @@
 
 **Date**: 2026-11-09  
 **Status**: Approved  
-**Target Platform**: macOS 14.0+ (Sonoma / Sequoia)  
-**Implementation Medium**: Swift 5.9+ / SwiftUI (Native App)
+**Target Platform**: macOS 12.0+ (Monterey and newer)  
+**Implementation Medium**: Swift / SwiftUI views hosted in an AppKit app shell (Native App, built with Swift Package Manager + Command Line Tools)
 
 ---
 
@@ -20,7 +20,7 @@ To build a high-performance, charming native Mac desktop companion for Caitlyn's
 ## 2. Goals, Non-Goals & Anti-Goals
 
 ### Goals
-1. **Lightweight & Ambient**: Sits quietly in the macOS menu bar (`MenuBarExtra`), displaying real-time stream status with an animated live indicator and uptime counter.
+1. **Lightweight & Ambient**: Sits quietly in the macOS menu bar (AppKit `NSStatusItem` + `NSPopover`), displaying real-time stream status with an animated live indicator and uptime counter.
 2. **Cait-pedia Lore Hub**: Searchable, categorized dictionary of inside jokes, memes, lore milestones, and chat glossary.
 3. **Stream Archives & Replay Shelf**: Curated replay shelf with YouTube video cards; clicking any video, stream, or clip instantly launches it in the user's default external browser (`NSWorkspace.shared.open`), preserving their YouTube login, chat, and subscriptions.
 4. **Clip Roulette**: A fun button that spins and opens a random iconic stream clip or highlight in the default browser.
@@ -43,7 +43,8 @@ To build a high-performance, charming native Mac desktop companion for Caitlyn's
 
 ## 3. Constraints
 
-* **Operating System**: macOS 14.0 (Sonoma) or newer, enabling modern SwiftUI `MenuBarExtra`, `NavigationSplitView`, and `@Observable` macro state modeling.
+* **Operating System**: macOS 12.0 (Monterey) or newer (user requirement, 2026-11-09). This rules out `MenuBarExtra` (13+), `NavigationSplitView` (13+), `openWindow` (13+), `@Observable` (14+), `Grid` (13+) and Swift `Regex` literals (13+). Use instead: `NSStatusItem` + `NSPopover` hosting SwiftUI, `NavigationView` with a sidebar `List`, an AppKit-managed `NSWindow` hosting SwiftUI, `ObservableObject`/`@Published`, `LazyVGrid`, and `NSRegularExpression`/manual parsing.
+* **Toolchain**: Only Xcode Command Line Tools are installed (no Xcode). The app is a Swift package; tests use Swift Testing (XCTest is unavailable) and run via `scripts/test.sh`. A script assembles the `.app` bundle.
 * **Apple Silicon & Intel**: Must run natively on both Apple Silicon (arm64) and Intel (x86_64) Macs.
 * **Network & Quotas**: Avoid direct reliance on metered YouTube Data API v3 client keys that easily exhaust daily quota limits across multiple app users.
 * **Storage & Sandbox**: Must conform to macOS App Sandbox guidelines, storing user preferences in `UserDefaults` and cached remote configs in `Application Support`.
@@ -65,7 +66,7 @@ To build a high-performance, charming native Mac desktop companion for Caitlyn's
 ### 5.1 Project Structure
 ```text
 CaitlynSwift/
-├── CaitlynSwiftApp.swift       # App entry point, MenuBarExtra & WindowGroup
+├── main.swift / AppDelegate     # AppKit entry point: status item, popover, main window
 ├── Models/
 │   ├── HubConfig.swift          # Root remote/local config model
 │   ├── StreamStatus.swift       # Live/Offline status, streamId, title, uptime
@@ -92,14 +93,14 @@ CaitlynSwift/
     └── Assets.xcassets          # App icons, witch hat symbol, badges
 ```
 
-### 5.2 Surface 1: Menu Bar Item (`MenuBarExtra`)
+### 5.2 Surface 1: Menu Bar Item (`NSStatusItem` + `NSPopover`)
 * **Status Icon**: Displays a custom icon (witch hat / broadcast dot). If Caitlyn is live, shows an accent color (purple/red) or pulse.
 * **Popover View**:
   * **Header**: Caitlyn Momochi avatar, `@bukancaitlyn`, Live/Offline badge.
   * **Stream Card**: Current stream title, uptime counter (or time since last stream if offline, calculated from the latest VOD date), and "Watch Stream ↗" button opening the default browser via `NSWorkspace.shared.open`.
   * **Footer Action**: "Open Full App" button to toggle the main window, plus Quit.
 
-### 5.3 Surface 2: Main App Window (`NavigationSplitView`)
+### 5.3 Surface 2: Main App Window (`NavigationView` sidebar in an AppKit `NSWindow`)
 * **Navigation Sidebar**:
   1. 🔴 **Live & Replays**: Featured recent VODs, stream categories, stats.
   2. 📖 **Cait-pedia**: Lore entries categorized by era (*Witch Era*, *Audio Engineer Era*, *VTuber Shenanigans*, *Chat Memes*) with instant search filtering.
@@ -107,7 +108,7 @@ CaitlynSwift/
 
 ### 5.4 Data Flow & Syncing
 1. App launches $\rightarrow$ Loads bundled `caitlyn_hub.json` synchronously into memory so UI renders instantly.
-2. Background task $\rightarrow$ Calls `ConfigSyncService.sync()` to fetch latest JSON from GitHub Raw URL. If updated, UI updates reactively via `@Observable`.
+2. Background task $\rightarrow$ Calls `ConfigSyncService.sync()` to fetch latest JSON from GitHub Raw URL. If updated, UI updates reactively via `ObservableObject`/`@Published`.
 3. Background timer (every 3 minutes) $\rightarrow$ Calls `LiveStatusService.checkLive()`:
    * Inspects YouTube channel live status and verifies `isLive` is true (filtering out scheduled upcoming waiting rooms so false alerts never trigger).
    * Parses stream title and start timestamp; computes live uptime. When offline, computes "time since last stream" using the latest VOD date from `caitlyn_hub.json`.
