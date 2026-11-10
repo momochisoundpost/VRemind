@@ -48,6 +48,29 @@ struct HubLogicTests {
         #expect(sorted.last?.id == "PGzo5C_3rdQ")
     }
 
+    @Test func replaysPaginateByPageSize() {
+        let seed = HubConfig.loadBundledSeed()
+        let sorted = ReplaysView.sorted(seed.replays)
+        #expect(ReplaysView.totalPages(for: sorted.count, pageSize: 8) == 4)
+
+        let page1 = ReplaysView.page(of: sorted, pageIndex: 0, pageSize: 8)
+        #expect(page1.count == 8)
+        #expect(page1.first?.id == "S-rjK_FwjMU")
+
+        let page4 = ReplaysView.page(of: sorted, pageIndex: 3, pageSize: 8)
+        #expect(page4.count == 6)
+        #expect(page4.last?.id == "PGzo5C_3rdQ")
+
+        let clampedLow = ReplaysView.page(of: sorted, pageIndex: -1, pageSize: 8)
+        #expect(clampedLow.first?.id == "S-rjK_FwjMU")
+
+        let clampedHigh = ReplaysView.page(of: sorted, pageIndex: 99, pageSize: 8)
+        #expect(clampedHigh.last?.id == "PGzo5C_3rdQ")
+
+        #expect(ReplaysView.totalPages(for: 0, pageSize: 8) == 1)
+        #expect(ReplaysView.page(of: [], pageIndex: 0, pageSize: 8).isEmpty)
+    }
+
     @Test func emptyClipsReturnsNil() {
         var rng = SystemRandomNumberGenerator()
         let picked = ClipRouletteView.pickRandomClip(from: [], excluding: nil, using: &rng)

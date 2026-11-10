@@ -1,9 +1,26 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import CaitlynKit
 
 struct MenuBarStatusTests {
     private let now = Date(timeIntervalSince1970: 2_000_000)
+
+    @Test @MainActor func popoverContentHeightFitsCompactly() {
+        let configService = ConfigSyncService(cacheDirectory: URL(fileURLWithPath: "/tmp/caitlyn_test_cache"))
+        let liveService = LiveStatusService(fetcher: { _ in "" })
+        let popover = MenuBarStatusView.makePopover(
+            configService: configService,
+            liveService: liveService,
+            onOpenHub: {},
+            onQuit: {}
+        )
+        let fittingSize = popover.contentViewController?.view.fittingSize ?? .zero
+        #expect(popover.contentSize.width == 320)
+        #expect(popover.contentSize.height == fittingSize.height)
+        #expect(popover.contentSize.height <= 230)
+    }
 
     @Test func liveWithStartTimeShowsElapsed() {
         let start = now.addingTimeInterval(-(1 * 3600 + 42 * 60))

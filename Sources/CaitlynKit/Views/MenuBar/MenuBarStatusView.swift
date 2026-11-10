@@ -18,6 +18,26 @@ public struct MenuBarStatusView: View {
         self.onQuit = onQuit
     }
 
+    public static func makePopover(
+        configService: ConfigSyncService,
+        liveService: LiveStatusService,
+        onOpenHub: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let rootView = MenuBarStatusView(
+            configService: configService,
+            liveService: liveService,
+            onOpenHub: onOpenHub,
+            onQuit: onQuit
+        )
+        let controller = NSHostingController(rootView: rootView)
+        popover.contentViewController = controller
+        popover.contentSize = controller.view.fittingSize
+        return popover
+    }
+
     public static func statusLine(status: StreamStatus, lastStreamAt: Date?, now: Date) -> String {
         if status.isLive {
             if let startedAt = status.startedAt {
@@ -144,5 +164,6 @@ public struct MenuBarStatusView: View {
         }
         .padding(14)
         .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

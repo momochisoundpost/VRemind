@@ -44,8 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupPopover() {
-        popover.behavior = .transient
-        let rootView = MenuBarStatusView(
+        popover = MenuBarStatusView.makePopover(
             configService: configService,
             liveService: liveService,
             onOpenHub: { [weak self] in
@@ -55,7 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApplication.shared.terminate(nil)
             }
         )
-        popover.contentViewController = NSHostingController(rootView: rootView)
     }
 
     private func observeStatus() {
@@ -63,6 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] status in
                 self?.updateStatusButton(isLive: status.isLive)
+                if let view = self?.popover.contentViewController?.view {
+                    self?.popover.contentSize = view.fittingSize
+                }
             }
             .store(in: &cancellables)
     }
@@ -80,6 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(sender)
         } else if let button = statusItem?.button {
+            if let view = popover.contentViewController?.view {
+                popover.contentSize = view.fittingSize
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }

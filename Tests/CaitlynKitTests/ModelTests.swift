@@ -7,7 +7,7 @@ struct ModelTests {
         let seed = HubConfig.loadBundledSeed()
         #expect(seed.channelHandle == "@bukancaitlyn")
         #expect(seed.lore.count == 8)
-        #expect(seed.replays.count == 8)
+        #expect(seed.replays.count == 30)
         #expect(seed.clips.count == 5)
     }
 
