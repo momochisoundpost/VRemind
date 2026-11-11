@@ -104,6 +104,30 @@ struct LivePageParserTests {
         #expect(LivePageParser.extractAvatarURL(from: html) == nil)
     }
 
+    @Test func testExtractAvatarURLFromLiveWatchPageWithGgpht() {
+        let html = """
+        {"videoSecondaryInfoRenderer":{"owner":{"videoOwnerRenderer":{"thumbnail":{"thumbnails":[{"url":"https://yt3.ggpht.com/avatar_live_token=s48-c-k-c0x00ffffff-no-rj","width":48,"height":48},{"url":"https://yt3.ggpht.com/avatar_live_token=s88-c-k-c0x00ffffff-no-rj","width":88,"height":88}]}}}}}
+        """
+        let url = LivePageParser.extractAvatarURL(from: html)
+        #expect(url?.absoluteString == "https://yt3.ggpht.com/avatar_live_token=s48-c-k-c0x00ffffff-no-rj" || url?.absoluteString == "https://yt3.ggpht.com/avatar_live_token=s88-c-k-c0x00ffffff-no-rj")
+    }
+
+    @Test func testExtractAvatarURLFromEscapedGgpht() {
+        let html = """
+        <script>var ytInitialData = {"owner":{"thumbnail":{"thumbnails":[{"url":"https:\\/\\/yt3.ggpht.com\\/avatar_live_escaped=s88-c-k-c0x00ffffff-no-rj"}]}}};</script>
+        """
+        let url = LivePageParser.extractAvatarURL(from: html)
+        #expect(url?.absoluteString == "https://yt3.ggpht.com/avatar_live_escaped=s88-c-k-c0x00ffffff-no-rj")
+    }
+
+    @Test func testExtractAvatarURLFromYt4Domain() {
+        let html = """
+        <link rel="image_src" href="https://yt4.ggpht.com/avatar_yt4_live">
+        """
+        let url = LivePageParser.extractAvatarURL(from: html)
+        #expect(url?.absoluteString == "https://yt4.ggpht.com/avatar_yt4_live")
+    }
+
     @Test func transitionLifecycleFromUpcomingToLive() {
         let upcomingHTML = #"""
         ytInitialPlayerResponse = {"videoDetails":{"videoId":"stream999","title":"Guerilla Live","isUpcoming":true},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"startTimestamp":"2026-11-12T12:00:00Z"}}}}

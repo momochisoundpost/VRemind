@@ -66,25 +66,57 @@ public enum LivePageParser {
     }
 
     public static func extractAvatarURL(from html: String) -> URL? {
-        let prefix = "https://yt3.googleusercontent.com/"
-        if let startRange = html.range(of: prefix) {
-            let remainder = html[startRange.lowerBound...]
-            let endIdx = remainder.firstIndex { char in
-                char == "\"" || char == "'" || char == " " || char == ">" || char == "<" || char == "\\"
-            } ?? remainder.endIndex
-            let urlString = String(remainder[..<endIdx])
-            return URL(string: urlString)
+        if let ownerMarkerRange = html.range(of: "videoOwnerRenderer") ?? html.range(of: "\"owner\":") {
+            let searchSlice = html[ownerMarkerRange.upperBound...]
+            let searchLength = min(1500, searchSlice.count)
+            let limitedEnd = searchSlice.index(searchSlice.startIndex, offsetBy: searchLength)
+            if let avatar = findAvatarURL(in: searchSlice[..<limitedEnd]) {
+                return avatar
+            }
         }
-        let escapedPrefix = "https:\\/\\/yt3.googleusercontent.com\\/"
-        if let startRange = html.range(of: escapedPrefix) {
-            let remainder = html[startRange.lowerBound...]
-            let endIdx = remainder.firstIndex { char in
-                char == "\"" || char == "'" || char == " " || char == ">" || char == "<"
-            } ?? remainder.endIndex
-            let unescaped = String(remainder[..<endIdx]).replacingOccurrences(of: "\\/", with: "/")
-            return URL(string: unescaped)
+        return findAvatarURL(in: html[...])
+    }
+
+    private static let avatarPrefixes: [(prefix: String, isEscaped: Bool)] = [
+        ("https://yt3.ggpht.com/", false),
+        ("https://yt4.ggpht.com/", false),
+        ("https://yt3.googleusercontent.com/", false),
+        ("https://yt4.googleusercontent.com/", false),
+        ("https:\\/\\/yt3.ggpht.com\\/", true),
+        ("https:\\/\\/yt4.ggpht.com\\/", true),
+        ("https:\\/\\/yt3.googleusercontent.com\\/", true),
+        ("https:\\/\\/yt4.googleusercontent.com\\/", true)
+    ]
+
+    private static func findAvatarURL(in slice: Substring) -> URL? {
+        var earliestMatch: (range: Range<Substring.Index>, isEscaped: Bool)? = nil
+
+        for item in avatarPrefixes {
+            if let range = slice.range(of: item.prefix) {
+                if let currentEarliest = earliestMatch {
+                    if range.lowerBound < currentEarliest.range.lowerBound {
+                        earliestMatch = (range, item.isEscaped)
+                    }
+                } else {
+                    earliestMatch = (range, item.isEscaped)
+                }
+            }
         }
-        return nil
+
+        guard let match = earliestMatch else {
+            return nil
+        }
+
+        let remainder = slice[match.range.lowerBound...]
+        let endIdx = remainder.firstIndex { char in
+            char == "\"" || char == "'" || char == " " || char == ">" || char == "<" || (!match.isEscaped && char == "\\")
+        } ?? remainder.endIndex
+
+        var urlString = String(remainder[..<endIdx])
+        if match.isEscaped {
+            urlString = urlString.replacingOccurrences(of: "\\/", with: "/")
+        }
+        return URL(string: urlString)
     }
 
     public static func extractChannelTitle(from html: String) -> String? {
