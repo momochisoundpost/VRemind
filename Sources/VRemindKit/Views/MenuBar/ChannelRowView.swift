@@ -23,7 +23,7 @@ public struct ChannelRowView: View {
         return false
     }
 
-    public var streamURL: URL {
+    public var streamURL: URL? {
         switch status {
         case .live(let videoId, _, _), .upcoming(let videoId, _, _):
             if !videoId.isEmpty {
@@ -33,13 +33,16 @@ public struct ChannelRowView: View {
             break
         }
         let handle = channel.handle.hasPrefix("@") ? channel.handle : "@\(channel.handle)"
-        return URL(string: "https://www.youtube.com/\(handle)/live")!
+        let encodedHandle = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
+        return URL(string: "https://www.youtube.com/\(encodedHandle)/live")
     }
 
     public var body: some View {
         HStack(spacing: 10) {
             Button(action: {
-                LinkOpener.open(streamURL)
+                if let streamURL {
+                    LinkOpener.open(streamURL)
+                }
             }) {
                 HStack(spacing: 10) {
                     ChannelAvatarView(url: channel.avatarURL, size: 36)

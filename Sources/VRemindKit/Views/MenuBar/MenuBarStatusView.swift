@@ -176,6 +176,7 @@ public struct MenuBarStatusView: View {
                     .font(.system(size: 12))
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(",", modifiers: .command)
             .help("Preferences (⌘,)")
 
             Button(action: onQuit) {
