@@ -5,14 +5,23 @@ import Foundation
 public final class StreamMonitorService: ObservableObject {
     public typealias Fetcher = @Sendable (URL) async throws -> (Data, URLResponse)
 
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.timeoutIntervalForRequest = 15
+        return URLSession(configuration: config)
+    }()
+
     public nonisolated static let defaultFetcher: Fetcher = { url in
         var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-        return try await URLSession.shared.data(for: request)
+        return try await session.data(for: request)
     }
 
     @Published public private(set) var isRefreshing: Bool = false
@@ -107,13 +116,16 @@ public final class StreamMonitorService: ObservableObject {
 
                         do {
                             let (data, _) = try await fetch(url)
-                            guard let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-                                return (channel, .success((.unrecognized, nil, nil)))
+                            let outcome = autoreleasepool { () -> (LivePageResult, String?, URL?) in
+                                guard let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+                                    return (.unrecognized, nil, nil)
+                                }
+                                let parsed = LivePageParser.parse(html: html)
+                                let extractedTitle = LivePageParser.extractChannelTitle(from: html)
+                                let extractedAvatar = LivePageParser.extractAvatarURL(from: html)
+                                return (parsed, extractedTitle, extractedAvatar)
                             }
-                            let parsed = LivePageParser.parse(html: html)
-                            let extractedTitle = LivePageParser.extractChannelTitle(from: html)
-                            let extractedAvatar = LivePageParser.extractAvatarURL(from: html)
-                            return (channel, .success((parsed, extractedTitle, extractedAvatar)))
+                            return (channel, .success(outcome))
                         } catch {
                             return (channel, .failure(error))
                         }

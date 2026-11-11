@@ -2,7 +2,6 @@ import SwiftUI
 
 public struct StatusBadge: View {
     public let isLive: Bool
-    @State private var isPulsing = false
 
     public init(isLive: Bool) {
         self.isLive = isLive
@@ -13,14 +12,6 @@ public struct StatusBadge: View {
             Circle()
                 .fill(isLive ? Theme.live : Color.secondary.opacity(0.6))
                 .frame(width: 8, height: 8)
-                .scaleEffect(isLive && isPulsing ? 1.25 : 1.0)
-                .opacity(isLive && isPulsing ? 0.65 : 1.0)
-                .animation(
-                    isLive
-                        ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
-                        : .default,
-                    value: isPulsing
-                )
 
             Text(isLive ? "LIVE NOW" : "OFFLINE")
                 .font(.system(size: 11, weight: .bold))
@@ -36,11 +27,5 @@ public struct StatusBadge: View {
             Capsule()
                 .strokeBorder(isLive ? Theme.live.opacity(0.35) : Color.secondary.opacity(0.25), lineWidth: 1)
         )
-        .onAppear {
-            isPulsing = isLive
-        }
-        .onChange(of: isLive) { newValue in
-            isPulsing = newValue
-        }
     }
 }
