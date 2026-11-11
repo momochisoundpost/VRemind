@@ -84,6 +84,11 @@ struct LivePageParserTests {
         #expect(LivePageParser.extractChannelTitle(from: html) == "Oshi Channel & Gaming")
     }
 
+    @Test func extractChannelTitleWithApostropheInOgTitle() {
+        let html = #"<html><head><meta property="og:title" content="Caitlyn's Channel - YouTube"></head></html>"#
+        #expect(LivePageParser.extractChannelTitle(from: html) == "Caitlyn's Channel")
+    }
+
     @Test func extractChannelTitleFromTitleTag() {
         let html = #"<html><head><title>Kobo Kanaeru Ch. hololive-ID - YouTube</title></head></html>"#
         #expect(LivePageParser.extractChannelTitle(from: html) == "Kobo Kanaeru Ch. hololive-ID")

@@ -101,8 +101,10 @@ public enum LivePageParser {
 
     private static func extractChannelTitleFromTags(from html: String) -> String? {
         let ogPatterns = [
-            #"<meta\s+[^>]*property\s*=\s*["']og:title["'][^>]*content\s*=\s*["']([^"']+)["']"#,
-            #"<meta\s+[^>]*content\s*=\s*["']([^"']+)["'][^>]*property\s*=\s*["']og:title["']"#
+            #"<meta\s+[^>]*property\s*=\s*["']og:title["'][^>]*content\s*=\s*"([^"]+)""#,
+            #"<meta\s+[^>]*property\s*=\s*["']og:title["'][^>]*content\s*=\s*'([^']+)'"#,
+            #"<meta\s+[^>]*content\s*=\s*"([^"]+)"[^>]*property\s*=\s*["']og:title["']"#,
+            #"<meta\s+[^>]*content\s*=\s*'([^']+)'[^>]*property\s*=\s*["']og:title["']"#
         ]
         for pattern in ogPatterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
