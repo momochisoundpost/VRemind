@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - MenuBarSections
@@ -29,9 +30,17 @@ public final class MenuBarStatusViewModel: ObservableObject {
     public let channelStore: ChannelStore
     public let monitorService: StreamMonitorService
 
+    private var cancellables = Set<AnyCancellable>()
+
     public init(channelStore: ChannelStore, monitorService: StreamMonitorService) {
         self.channelStore = channelStore
         self.monitorService = monitorService
+
+        Publishers.Merge(channelStore.objectWillChange, monitorService.objectWillChange)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     public nonisolated static func splitSections(
@@ -114,6 +123,8 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
 public struct MenuBarStatusView: View {
     @ObservedObject public var viewModel: MenuBarStatusViewModel
+    @ObservedObject private var channelStore: ChannelStore
+    @ObservedObject private var monitorService: StreamMonitorService
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
 
@@ -123,6 +134,8 @@ public struct MenuBarStatusView: View {
         onQuit: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
+        self._channelStore = ObservedObject(wrappedValue: viewModel.channelStore)
+        self._monitorService = ObservedObject(wrappedValue: viewModel.monitorService)
         self.onOpenPreferences = onOpenPreferences
         self.onQuit = onQuit
     }

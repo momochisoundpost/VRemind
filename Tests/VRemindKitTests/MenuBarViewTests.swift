@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 import Testing
@@ -75,6 +76,39 @@ struct MenuBarViewTests {
 
         viewModel.removeChannel(id: "@to_remove")
         #expect(!channelStore.channels.contains { $0.id == "@to_remove" })
+    }
+
+    @Test @MainActor func testViewModelForwardsStoreAndMonitorChanges() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        _ = channelStore.addChannel(handle: "@test_channel", name: "Test Channel", avatarURL: nil)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let notifier = NotificationService(center: NoOpNotificationCenter())
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) }
+        )
+        let viewModel = MenuBarStatusViewModel(channelStore: channelStore, monitorService: monitor)
+
+        var emittedCount = 0
+        var cancellables = Set<AnyCancellable>()
+        viewModel.objectWillChange
+            .sink { _ in
+                emittedCount += 1
+            }
+            .store(in: &cancellables)
+
+        // 1. Channel store change (removeChannel) triggers viewModel.objectWillChange
+        channelStore.removeChannel(id: "@test_channel")
+        #expect(emittedCount >= 1)
+
+        let countAfterStoreChange = emittedCount
+
+        // 2. Monitor service change (refreshAll) triggers viewModel.objectWillChange
+        await monitor.refreshAll()
+        #expect(emittedCount > countAfterStoreChange)
     }
 
     @Test @MainActor func testConfigureStatusButton() {

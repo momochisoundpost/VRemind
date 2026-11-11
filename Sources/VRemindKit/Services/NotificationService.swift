@@ -202,6 +202,7 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        let options: UNNotificationPresentationOptions = notification.request.content.sound != nil ? [.banner, .sound] : [.banner]
+        completionHandler(options)
     }
 }

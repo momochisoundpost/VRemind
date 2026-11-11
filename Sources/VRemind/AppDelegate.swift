@@ -42,9 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusButton()
 
         monitorService.startPolling()
-        Task {
-            await monitorService.refreshAll()
-        }
 
         showOnboardingIfNeeded()
     }

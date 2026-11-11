@@ -486,4 +486,88 @@ struct StreamMonitorServiceTests {
         let countAfter = fetchCount.get()
         #expect(countAfter == countBefore)
     }
+
+    @Test @MainActor func testConcurrentRefreshQueuesFollowUpPass() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        _ = channelStore.addChannel(handle: "@first", name: "First Channel", avatarURL: nil)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+
+        final class ServiceHolder: @unchecked Sendable {
+            weak var service: StreamMonitorService?
+        }
+        let holder = ServiceHolder()
+
+        actor FetchTracker {
+            var fetchedURLs: [URL] = []
+            var didTriggerConcurrent = false
+
+            func record(_ url: URL) {
+                fetchedURLs.append(url)
+            }
+
+            func shouldTriggerConcurrent() -> Bool {
+                if !didTriggerConcurrent {
+                    didTriggerConcurrent = true
+                    return true
+                }
+                return false
+            }
+
+            func urls() -> [URL] {
+                fetchedURLs
+            }
+        }
+        let tracker = FetchTracker()
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { url in
+                await tracker.record(url)
+                let urlString = url.absoluteString
+
+                if urlString.contains("@first") {
+                    // Only trigger the concurrent refresh once during the initial pass
+                    let shouldTrigger = await tracker.shouldTriggerConcurrent()
+                    if shouldTrigger {
+                        _ = await MainActor.run {
+                            channelStore.addChannel(handle: "@second", name: "Second Channel", avatarURL: nil)
+                        }
+                        await holder.service?.refreshAll()
+                    }
+                    return (makeLiveHTML(videoId: "vid_first"), make200Response(url: url))
+                } else if urlString.contains("@second") {
+                    return (makeLiveHTML(videoId: "vid_second"), make200Response(url: url))
+                }
+
+                return (Data(), make200Response(url: url))
+            }
+        )
+        holder.service = service
+
+        // Run the initial refresh
+        await service.refreshAll()
+
+        let fetched = await tracker.urls().map { $0.absoluteString }
+        #expect(fetched.contains { $0.contains("@first") })
+        #expect(fetched.contains { $0.contains("@second") })
+
+        let firstStatus = service.status(for: WatchedChannel(id: "@first", name: "First Channel", handle: "@first"))
+        let secondStatus = service.status(for: WatchedChannel(id: "@second", name: "Second Channel", handle: "@second"))
+
+        if case .live(let vid1, _, _) = firstStatus {
+            #expect(vid1 == "vid_first")
+        } else {
+            Issue.record("Expected @first to be live")
+        }
+
+        if case .live(let vid2, _, _) = secondStatus {
+            #expect(vid2 == "vid_second")
+        } else {
+            Issue.record("Expected @second to be live via queued refresh pass")
+        }
+    }
 }

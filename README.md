@@ -56,14 +56,16 @@ VRemind is structured into a reusable core library target and a lightweight exec
 CaitlynSwift/
 ├── Sources/
 │   ├── VRemindKit/               # Core framework library
-│   │   ├── Models/               # WatchedChannel, StreamStatus, AppSettings
-│   │   ├── Services/             # StreamMonitorService, NotificationService, LaunchAtLoginHelper
-│   │   ├── Stores/               # ChannelStore, PreferencesStore (ObservableObject persistence)
-│   │   ├── Parsers/              # LivePageParser (YouTube /live HTML scraper)
-│   │   ├── Utilities/            # LinkOpener, ElapsedTime, AppConstants
-│   │   └── Views/                # SwiftUI views (MenuBarView, PreferencesView, OnboardingView)
-│   └── VRemindApp/               # Application executable
-│       └── AppDelegate.swift     # NSApplicationDelegate, NSStatusItem, NSPopover, Sleep/Wake
+│   │   ├── Models/               # WatchedChannel, StreamStatus, AppSettings, ElapsedTime
+│   │   ├── Services/             # StreamMonitorService, NotificationService, ChannelStore, PreferencesStore, LivePageParser
+│   │   ├── Utilities/            # LinkOpener, LaunchAtLoginHelper
+│   │   ├── Views/                # SwiftUI views (MenuBar, Preferences, Onboarding, Components, Theme)
+│   │   └── AppConstants.swift    # Global constants
+│   └── VRemind/                  # Application executable
+│       ├── AppDelegate.swift     # NSApplicationDelegate, NSStatusItem, NSPopover, Sleep/Wake
+│       ├── PreferencesWindowController.swift
+│       ├── OnboardingWindowController.swift
+│       └── main.swift
 ├── Tests/
 │   └── VRemindKitTests/          # Swift Testing suite (90+ comprehensive unit and view tests)
 ├── Resources/
@@ -74,7 +76,7 @@ CaitlynSwift/
 ```
 
 - **`VRemindKit`**: Contains all business logic, HTML scraping, notification management, persistence, and SwiftUI UI components. Decoupled from application lifecycle to allow thorough automated testing.
-- **`VRemindApp`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, and window controllers for Preferences and Onboarding. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
+- **`VRemind`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, and window controllers for Preferences and Onboarding. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
 
 ---
 

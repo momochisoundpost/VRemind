@@ -31,6 +31,7 @@ public final class StreamMonitorService: ObservableObject {
     private var pollingInterval: TimeInterval = AppConstants.livePollInterval
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
+    private var needsAnotherRefresh: Bool = false
 
     public init(
         channelStore: ChannelStore,
@@ -60,10 +61,20 @@ public final class StreamMonitorService: ObservableObject {
     }
 
     public func refreshAll() async {
-        guard !isRefreshing else { return }
+        if isRefreshing {
+            needsAnotherRefresh = true
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
 
+        repeat {
+            needsAnotherRefresh = false
+            await performRefreshPass()
+        } while needsAnotherRefresh && !Task.isCancelled
+    }
+
+    private func performRefreshPass() async {
         let channels = channelStore.channels
         guard !channels.isEmpty else { return }
 
@@ -71,6 +82,7 @@ public final class StreamMonitorService: ObservableObject {
         let fetch = self.fetcher
 
         for startIndex in stride(from: 0, to: channels.count, by: batchSize) {
+            guard !Task.isCancelled else { break }
             let endIndex = min(startIndex + batchSize, channels.count)
             let batch = Array(channels[startIndex..<endIndex])
 
