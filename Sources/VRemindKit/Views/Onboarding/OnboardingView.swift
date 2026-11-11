@@ -84,7 +84,7 @@ public struct OnboardingView: View {
                     Circle()
                         .fill(Theme.accent.opacity(0.18))
                         .frame(width: 56, height: 56)
-                    Image(systemName: "sparkles.tv")
+                    Image(systemName: "play.tv")
                         .font(.system(size: 26, weight: .semibold))
                         .foregroundColor(Theme.accent)
                 }
