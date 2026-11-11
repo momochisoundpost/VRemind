@@ -1,0 +1,321 @@
+import AppKit
+import SwiftUI
+
+// MARK: - MenuBarSections
+
+public struct MenuBarSections: Equatable, Sendable {
+    public let live: [WatchedChannel]
+    public let upcoming: [WatchedChannel]
+    public let offline: [WatchedChannel]
+
+    public init(
+        live: [WatchedChannel] = [],
+        upcoming: [WatchedChannel] = [],
+        offline: [WatchedChannel] = []
+    ) {
+        self.live = live
+        self.upcoming = upcoming
+        self.offline = offline
+    }
+}
+
+// MARK: - MenuBarStatusViewModel
+
+@MainActor
+public final class MenuBarStatusViewModel: ObservableObject {
+    @Published public var newHandleInput: String = ""
+    @Published public private(set) var validationError: String? = nil
+
+    public let channelStore: ChannelStore
+    public let monitorService: StreamMonitorService
+
+    public init(channelStore: ChannelStore, monitorService: StreamMonitorService) {
+        self.channelStore = channelStore
+        self.monitorService = monitorService
+    }
+
+    public nonisolated static func splitSections(
+        channels: [WatchedChannel],
+        statuses: [String: StreamStatus]
+    ) -> MenuBarSections {
+        var live: [WatchedChannel] = []
+        var upcoming: [WatchedChannel] = []
+        var offline: [WatchedChannel] = []
+
+        for channel in channels {
+            let status = statuses[channel.id] ?? statuses[channel.id.lowercased()] ?? .unknown
+            switch status {
+            case .live:
+                live.append(channel)
+            case .upcoming:
+                upcoming.append(channel)
+            case .offline, .unknown:
+                offline.append(channel)
+            }
+        }
+
+        return MenuBarSections(live: live, upcoming: upcoming, offline: offline)
+    }
+
+    public var sections: MenuBarSections {
+        Self.splitSections(
+            channels: channelStore.channels,
+            statuses: monitorService.statuses
+        )
+    }
+
+    public var liveCount: Int {
+        sections.live.count
+    }
+
+    public var isRefreshing: Bool {
+        monitorService.isRefreshing
+    }
+
+    @discardableResult
+    public func addChannel() -> Bool {
+        guard let normalized = WatchedChannel.normalizeHandle(newHandleInput) else {
+            validationError = "Please enter a valid channel handle or YouTube URL"
+            return false
+        }
+
+        let targetId = normalized.lowercased()
+        if channelStore.channels.contains(where: { $0.id.lowercased() == targetId }) {
+            validationError = "Channel is already in your watchlist"
+            return false
+        }
+
+        guard channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil) != nil else {
+            validationError = "Failed to add channel"
+            return false
+        }
+
+        newHandleInput = ""
+        validationError = nil
+
+        Task {
+            await monitorService.refreshAll()
+        }
+        return true
+    }
+
+    public func removeChannel(id: String) {
+        channelStore.removeChannel(id: id)
+    }
+
+    public func refresh() {
+        Task {
+            await monitorService.refreshAll()
+        }
+    }
+}
+
+// MARK: - MenuBarStatusView
+
+public struct MenuBarStatusView: View {
+    @ObservedObject public var viewModel: MenuBarStatusViewModel
+    public let onOpenPreferences: () -> Void
+    public let onQuit: () -> Void
+
+    public init(
+        viewModel: MenuBarStatusViewModel,
+        onOpenPreferences: @escaping () -> Void = {},
+        onQuit: @escaping () -> Void = {}
+    ) {
+        self.viewModel = viewModel
+        self.onOpenPreferences = onOpenPreferences
+        self.onQuit = onQuit
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            headerView
+            Divider()
+            channelListView
+            Divider()
+            AddChannelBarView(viewModel: viewModel)
+        }
+        .frame(width: 360, height: 440)
+    }
+
+    private var headerView: some View {
+        HStack(spacing: 8) {
+            Text("VRemind")
+                .font(.system(size: 15, weight: .bold))
+
+            if viewModel.liveCount > 0 {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Theme.live)
+                        .frame(width: 7, height: 7)
+                    Text("\(viewModel.liveCount) LIVE")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Theme.live)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(Theme.live.opacity(0.14))
+                )
+            }
+
+            Spacer()
+
+            Button(action: {
+                viewModel.refresh()
+            }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Refresh stream statuses")
+
+            Button(action: onOpenPreferences) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Preferences (⌘,)")
+
+            Button(action: onQuit) {
+                Image(systemName: "power")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .help("Quit VRemind")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var channelListView: some View {
+        let sections = viewModel.sections
+        let isEmpty = sections.live.isEmpty && sections.upcoming.isEmpty && sections.offline.isEmpty
+
+        return ScrollView {
+            if isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "person.2.slash")
+                        .font(.system(size: 26))
+                        .foregroundColor(.secondary)
+                    Text("No channels watched")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text("Add a YouTube handle below to track live streams.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if !sections.live.isEmpty {
+                        sectionBlock(
+                            title: "LIVE NOW",
+                            count: sections.live.count,
+                            color: Theme.live,
+                            channels: sections.live
+                        )
+                    }
+
+                    if !sections.upcoming.isEmpty {
+                        sectionBlock(
+                            title: "UPCOMING",
+                            count: sections.upcoming.count,
+                            color: .orange,
+                            channels: sections.upcoming
+                        )
+                    }
+
+                    if !sections.offline.isEmpty {
+                        sectionBlock(
+                            title: "OFFLINE",
+                            count: sections.offline.count,
+                            color: .secondary,
+                            channels: sections.offline
+                        )
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+        }
+    }
+
+    private func sectionBlock(
+        title: String,
+        count: Int,
+        color: Color,
+        channels: [WatchedChannel]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(color)
+
+                Text("(\(count))")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+
+            ForEach(channels) { channel in
+                ChannelRowView(
+                    channel: channel,
+                    status: viewModel.monitorService.status(for: channel),
+                    onDelete: {
+                        viewModel.removeChannel(id: channel.id)
+                    }
+                )
+            }
+        }
+    }
+
+    // MARK: - Static Helpers
+
+    public static func configureStatusButton(
+        _ button: NSStatusBarButton,
+        isLive: Bool,
+        flashPhase: Bool = false
+    ) {
+        let symbolName = isLive
+            ? (flashPhase ? "antenna.radiowaves.left.and.right" : "dot.radiowaves.left.and.right")
+            : "antenna.radiowaves.left.and.right"
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VRemind")?.withSymbolConfiguration(config) {
+            image.isTemplate = !isLive
+            button.image = image
+        }
+        button.contentTintColor = isLive ? (flashPhase ? .systemRed : NSColor(red: 0.95, green: 0.25, blue: 0.25, alpha: 0.55)) : nil
+        button.toolTip = isLive ? "VRemind (Live now)" : "VRemind"
+    }
+
+    public static func makePopover(
+        channelStore: ChannelStore,
+        monitorService: StreamMonitorService,
+        onOpenPreferences: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) -> NSPopover {
+        let viewModel = MenuBarStatusViewModel(
+            channelStore: channelStore,
+            monitorService: monitorService
+        )
+        let rootView = MenuBarStatusView(
+            viewModel: viewModel,
+            onOpenPreferences: onOpenPreferences,
+            onQuit: onQuit
+        )
+        let hostingController = NSHostingController(rootView: rootView)
+
+        let popover = NSPopover()
+        popover.contentSize = NSSize(width: 360, height: 440)
+        popover.behavior = .transient
+        popover.contentViewController = hostingController
+        return popover
+    }
+}

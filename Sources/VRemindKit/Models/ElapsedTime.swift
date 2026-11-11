@@ -15,4 +15,16 @@ public enum ElapsedTime {
         }
         return "\(totalHours / 24)d \(totalHours % 24)h"
     }
+
+    /// Formatted live stream duration: e.g. "42m" or "Live" if start date is nil.
+    public static func liveDuration(since date: Date?, now: Date = Date()) -> String {
+        guard let date else { return "Live" }
+        return short(from: date, to: now)
+    }
+
+    /// Formatted relative offline stream time: e.g. "42m ago" or "Offline" if date is nil.
+    public static func relative(from date: Date?, now: Date = Date()) -> String {
+        guard let date else { return "Offline" }
+        return "\(short(from: date, to: now)) ago"
+    }
 }
