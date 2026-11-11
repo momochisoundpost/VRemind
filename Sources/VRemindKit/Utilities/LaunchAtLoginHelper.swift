@@ -3,7 +3,7 @@ import Foundation
 import ServiceManagement
 
 /// Protocol defining a launch-at-login backend provider.
-public protocol LaunchAtLoginBackend: Sendable {
+protocol LaunchAtLoginBackend: Sendable {
     var isEnabled: Bool { get }
     @discardableResult
     func setEnabled(_ enabled: Bool) -> Bool
@@ -17,7 +17,7 @@ public enum LaunchAtLoginHelper {
     private static var _backend: (any LaunchAtLoginBackend)?
 
     /// Optional backend override for testing or custom environments.
-    public static var backend: (any LaunchAtLoginBackend)? {
+    static var backend: (any LaunchAtLoginBackend)? {
         get {
             lock.lock()
             defer { lock.unlock() }
@@ -31,7 +31,7 @@ public enum LaunchAtLoginHelper {
     }
 
     /// Resets the backend override to `nil`, restoring system-default resolution.
-    public static func resetBackend() {
+    static func resetBackend() {
         lock.lock()
         defer { lock.unlock() }
         _backend = nil
@@ -63,34 +63,43 @@ public enum LaunchAtLoginHelper {
         }
     }
 
+    /// Helper escaping special characters for safe inclusion in AppleScript string literals.
+    static func escapeAppleScriptString(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     /// Builds the AppleScript command used to add or remove login items on macOS 12 Monterey.
-    public static func makeMontereyAppleScript(enabled: Bool, appPath: String, appName: String) -> String {
+    static func makeMontereyAppleScript(enabled: Bool, appPath: String, appName: String) -> String {
+        let escapedPath = escapeAppleScriptString(appPath)
+        let escapedName = escapeAppleScriptString(appName)
         if enabled {
-            return "tell application \"System Events\" to make login item at end with properties {path:\"\(appPath)\", hidden:false}"
+            return "tell application \"System Events\" to make login item at end with properties {path:\"\(escapedPath)\", hidden:false}"
         } else {
-            return "tell application \"System Events\" to delete login item \"\(appName)\""
+            return "tell application \"System Events\" to delete login item \"\(escapedName)\""
         }
     }
 
     /// Builds the AppleScript command used to query existing login item names on macOS 12 Monterey.
-    public static func makeMontereyQueryAppleScript() -> String {
+    static func makeMontereyQueryAppleScript() -> String {
         "tell application \"System Events\" to get the name of every login item"
     }
 }
 
 /// macOS 13+ (Ventura and later) backend using modern `SMAppService.mainApp`.
 @available(macOS 13.0, *)
-public final class SMAppServiceBackend: LaunchAtLoginBackend, @unchecked Sendable {
-    public static let shared = SMAppServiceBackend()
+final class SMAppServiceBackend: LaunchAtLoginBackend, @unchecked Sendable {
+    static let shared = SMAppServiceBackend()
 
-    public typealias StatusProvider = () -> SMAppService.Status
-    public typealias ActionHandler = () throws -> Void
+    typealias StatusProvider = () -> SMAppService.Status
+    typealias ActionHandler = () throws -> Void
 
     private let statusProvider: StatusProvider
     private let registerAction: ActionHandler
     private let unregisterAction: ActionHandler
 
-    public init(
+    init(
         statusProvider: @escaping StatusProvider = { SMAppService.mainApp.status },
         registerAction: @escaping ActionHandler = { try SMAppService.mainApp.register() },
         unregisterAction: @escaping ActionHandler = { try SMAppService.mainApp.unregister() }
@@ -100,12 +109,12 @@ public final class SMAppServiceBackend: LaunchAtLoginBackend, @unchecked Sendabl
         self.unregisterAction = unregisterAction
     }
 
-    public var isEnabled: Bool {
+    var isEnabled: Bool {
         statusProvider() == .enabled
     }
 
     @discardableResult
-    public func setEnabled(_ enabled: Bool) -> Bool {
+    func setEnabled(_ enabled: Bool) -> Bool {
         if enabled == isEnabled {
             return true
         }
@@ -123,17 +132,17 @@ public final class SMAppServiceBackend: LaunchAtLoginBackend, @unchecked Sendabl
 }
 
 /// macOS 12 (Monterey) fallback backend using `NSAppleScript` against "System Events".
-public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked Sendable {
-    public static let shared = MontereyAppleScriptBackend()
+final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked Sendable {
+    static let shared = MontereyAppleScriptBackend()
 
-    public typealias Executor = (String) -> (success: Bool, output: [String]?)
+    typealias Executor = (String) -> (success: Bool, output: [String]?)
 
     private let lock = NSLock()
     private var _executor: Executor
     private var _appPath: String
     private var _appName: String
 
-    public var appPath: String {
+    var appPath: String {
         get {
             lock.lock()
             defer { lock.unlock() }
@@ -146,7 +155,7 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
         }
     }
 
-    public var appName: String {
+    var appName: String {
         get {
             lock.lock()
             defer { lock.unlock() }
@@ -159,7 +168,7 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
         }
     }
 
-    public var executor: Executor {
+    var executor: Executor {
         get {
             lock.lock()
             defer { lock.unlock() }
@@ -172,7 +181,7 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
         }
     }
 
-    public static let defaultExecutor: Executor = { scriptSource in
+    static let defaultExecutor: Executor = { scriptSource in
         guard let script = NSAppleScript(source: scriptSource) else {
             return (false, nil)
         }
@@ -184,9 +193,11 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
 
         var items: [String] = []
         if descriptor.descriptorType == typeAEList {
-            for i in 1...descriptor.numberOfItems {
-                if let item = descriptor.atIndex(i)?.stringValue {
-                    items.append(item)
+            if descriptor.numberOfItems > 0 {
+                for i in 1...descriptor.numberOfItems {
+                    if let item = descriptor.atIndex(i)?.stringValue {
+                        items.append(item)
+                    }
                 }
             }
         } else if let single = descriptor.stringValue {
@@ -195,18 +206,18 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
         return (true, items)
     }
 
-    public init(
+    init(
         appPath: String = Bundle.main.bundlePath,
         appName: String = Bundle.main.infoDictionary?["CFBundleName"] as? String
             ?? Bundle.main.bundleURL.deletingPathExtension().lastPathComponent,
         executor: @escaping Executor = MontereyAppleScriptBackend.defaultExecutor
     ) {
         self._appPath = appPath
-        self._appName = appName.isEmpty ? "Caitlyn" : appName
+        self._appName = appName.isEmpty ? "VRemind" : appName
         self._executor = executor
     }
 
-    public var isEnabled: Bool {
+    var isEnabled: Bool {
         let queryScript = LaunchAtLoginHelper.makeMontereyQueryAppleScript()
         let result = executor(queryScript)
         guard result.success, let list = result.output else {
@@ -216,7 +227,7 @@ public final class MontereyAppleScriptBackend: LaunchAtLoginBackend, @unchecked 
     }
 
     @discardableResult
-    public func setEnabled(_ enabled: Bool) -> Bool {
+    func setEnabled(_ enabled: Bool) -> Bool {
         if enabled == isEnabled {
             return true
         }

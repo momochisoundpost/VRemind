@@ -17,17 +17,33 @@ struct LaunchAtLoginHelperTests {
     @Test func testMakeMontereyAppleScript() {
         let addScript = LaunchAtLoginHelper.makeMontereyAppleScript(
             enabled: true,
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn"
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind"
         )
-        #expect(addScript == "tell application \"System Events\" to make login item at end with properties {path:\"/Applications/Caitlyn.app\", hidden:false}")
+        #expect(addScript == "tell application \"System Events\" to make login item at end with properties {path:\"/Applications/VRemind.app\", hidden:false}")
 
         let deleteScript = LaunchAtLoginHelper.makeMontereyAppleScript(
             enabled: false,
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn"
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind"
         )
-        #expect(deleteScript == "tell application \"System Events\" to delete login item \"Caitlyn\"")
+        #expect(deleteScript == "tell application \"System Events\" to delete login item \"VRemind\"")
+    }
+
+    @Test func testMakeMontereyAppleScriptEscapingQuotesAndBackslashes() {
+        let addScript = LaunchAtLoginHelper.makeMontereyAppleScript(
+            enabled: true,
+            appPath: "/Applications/VRemind \"Special\" \\Edition.app",
+            appName: "VRemind \"Special\" \\Edition"
+        )
+        #expect(addScript == "tell application \"System Events\" to make login item at end with properties {path:\"/Applications/VRemind \\\"Special\\\" \\\\Edition.app\", hidden:false}")
+
+        let deleteScript = LaunchAtLoginHelper.makeMontereyAppleScript(
+            enabled: false,
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind \"Special\" \\Edition"
+        )
+        #expect(deleteScript == "tell application \"System Events\" to delete login item \"VRemind \\\"Special\\\" \\\\Edition\"")
     }
 
     @Test func testMakeMontereyQueryAppleScript() {
@@ -37,25 +53,42 @@ struct LaunchAtLoginHelperTests {
 
     @Test func testMontereyBackendIsEnabledReflectsItems() {
         let backendWithApp = MontereyAppleScriptBackend(
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn",
-            executor: { _ in (true, ["Finder", "Caitlyn", "Notes"]) }
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
+            executor: { _ in (true, ["Finder", "VRemind", "Notes"]) }
         )
         #expect(backendWithApp.isEnabled == true)
 
         let backendWithoutApp = MontereyAppleScriptBackend(
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn",
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
             executor: { _ in (true, ["Finder", "Notes"]) }
         )
         #expect(backendWithoutApp.isEnabled == false)
 
         let backendFailure = MontereyAppleScriptBackend(
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn",
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
             executor: { _ in (false, nil) }
         )
         #expect(backendFailure.isEnabled == false)
+    }
+
+    @Test func testMontereyBackendEmptyItemsDoesNotCrash() {
+        let backend = MontereyAppleScriptBackend(
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
+            executor: { _ in (true, []) }
+        )
+        #expect(backend.isEnabled == false)
+    }
+
+    @Test func testMontereyBackendDefaultFallbackAppNameIsVRemind() {
+        let backend = MontereyAppleScriptBackend(
+            appPath: "/path",
+            appName: ""
+        )
+        #expect(backend.appName == "VRemind")
     }
 
     @Test func testMontereyBackendSetEnabledLifecycleAndShortCircuit() {
@@ -63,17 +96,17 @@ struct LaunchAtLoginHelperTests {
         var executedScripts: [String] = []
 
         let backend = MontereyAppleScriptBackend(
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn",
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
             executor: { script in
                 executedScripts.append(script)
                 if script.contains("get the name of every login item") {
                     return (true, currentItems)
                 } else if script.contains("make login item at end with properties") {
-                    currentItems.append("Caitlyn")
+                    currentItems.append("VRemind")
                     return (true, nil)
                 } else if script.contains("delete login item") {
-                    currentItems.removeAll { $0 == "Caitlyn" }
+                    currentItems.removeAll { $0 == "VRemind" }
                     return (true, nil)
                 }
                 return (false, nil)
@@ -114,8 +147,8 @@ struct LaunchAtLoginHelperTests {
     @Test func testMontereyBackendExecutorFailureReturnsFalse() {
         var isEnabledCall = true
         let backend = MontereyAppleScriptBackend(
-            appPath: "/Applications/Caitlyn.app",
-            appName: "Caitlyn",
+            appPath: "/Applications/VRemind.app",
+            appName: "VRemind",
             executor: { script in
                 if isEnabledCall {
                     isEnabledCall = false
