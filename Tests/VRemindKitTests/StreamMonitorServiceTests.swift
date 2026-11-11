@@ -431,4 +431,51 @@ struct StreamMonitorServiceTests {
         let caitlyn = channelStore.channels[0]
         #expect(service.status(for: caitlyn) == .unknown)
     }
+
+    @Test @MainActor func testDeallocationCleansUpObserversAndStopsPolling() async throws {
+        final class SpyNotificationCenter: NotificationCenter, @unchecked Sendable {
+            private let lock = NSLock()
+            private(set) var removedObserversCount: Int = 0
+
+            override func removeObserver(_ observer: Any) {
+                lock.lock()
+                defer { lock.unlock() }
+                removedObserversCount += 1
+                super.removeObserver(observer)
+            }
+        }
+
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+        let spyCenter = SpyNotificationCenter()
+        let fetchCount = ValueBox(0)
+
+        var service: StreamMonitorService? = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { _ in
+                fetchCount.set(fetchCount.get() + 1)
+                return (makeOfflineHTML(), make200Response())
+            },
+            notificationCenter: spyCenter
+        )
+
+        service?.startPolling(interval: 0.05)
+        try await Task.sleep(nanoseconds: 70_000_000)
+        let countBefore = fetchCount.get()
+        #expect(countBefore >= 1)
+
+        // Deallocate without explicit stopPolling()
+        service = nil
+
+        // Both sleepObserver and wakeObserver should be removed in deinit
+        #expect(spyCenter.removedObserversCount == 2)
+
+        // Wait to verify the background loop does not keep fetching after deinit
+        try await Task.sleep(nanoseconds: 120_000_000)
+        let countAfter = fetchCount.get()
+        #expect(countAfter == countBefore)
+    }
 }

@@ -271,6 +271,16 @@ public final class StreamMonitorService: ObservableObject {
         }
     }
 
+    deinit {
+        pollingTask?.cancel()
+        if let sleepObserver {
+            notificationCenter.removeObserver(sleepObserver)
+        }
+        if let wakeObserver {
+            notificationCenter.removeObserver(wakeObserver)
+        }
+    }
+
     private func handleScreensDidSleep() {
         guard isPolling, !isPausedForSleep else { return }
         isPausedForSleep = true
@@ -289,12 +299,16 @@ public final class StreamMonitorService: ObservableObject {
         let interval = self.pollingInterval
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard self != nil else { break }
                 await self?.refreshAll()
+
                 do {
                     try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 } catch {
                     break
                 }
+
+                guard self != nil else { break }
             }
         }
     }
