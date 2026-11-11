@@ -18,7 +18,7 @@ public final class PreferencesViewModel: ObservableObject {
     public init(
         preferencesStore: PreferencesStore,
         channelStore: ChannelStore,
-        notificationService: NotificationService? = nil,
+        notificationService: NotificationService?,
         onFactoryReset: (() -> Void)? = nil
     ) {
         self.preferencesStore = preferencesStore
@@ -26,6 +26,19 @@ public final class PreferencesViewModel: ObservableObject {
         self.notificationService = notificationService
         self.onFactoryReset = onFactoryReset
         self.authorizationStatus = notificationService?.authorizationStatus ?? .notDetermined
+    }
+
+    public convenience init(
+        preferencesStore: PreferencesStore,
+        channelStore: ChannelStore,
+        onFactoryReset: (() -> Void)? = nil
+    ) {
+        self.init(
+            preferencesStore: preferencesStore,
+            channelStore: channelStore,
+            notificationService: NotificationService(),
+            onFactoryReset: onFactoryReset
+        )
     }
 
     public func setLaunchAtLogin(_ enabled: Bool) {
@@ -161,57 +174,61 @@ public struct PreferencesView: View {
                     .toggleStyle(.checkbox)
             }
 
-            Divider()
+            if viewModel.notificationService != nil {
+                Divider()
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Notification Permission")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Notification Permission")
+                        .font(.headline)
 
-                HStack {
-                    switch viewModel.authorizationStatus {
-                    case .authorized, .provisional:
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Notifications Enabled")
-                        }
-                    case .denied:
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
-                            Text("Notifications disabled in System Settings")
-                        }
+                    HStack {
+                        switch viewModel.authorizationStatus {
+                        case .authorized, .provisional:
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Notifications Enabled")
+                            }
+                        case .denied:
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Notifications disabled in System Settings")
+                            }
 
-                        Spacer()
+                            Spacer()
 
-                        Button("Open System Settings") {
-                            viewModel.openSystemNotificationSettings()
-                        }
-                    default:
-                        HStack(spacing: 6) {
-                            Image(systemName: "bell.slash")
-                                .foregroundColor(.secondary)
-                            Text("Notifications Not Enabled")
-                        }
+                            Button("Open System Settings") {
+                                viewModel.openSystemNotificationSettings()
+                            }
+                        default:
+                            HStack(spacing: 6) {
+                                Image(systemName: "bell.slash")
+                                    .foregroundColor(.secondary)
+                                Text("Notifications Not Enabled")
+                            }
 
-                        Spacer()
+                            Spacer()
 
-                        Button("Enable Notifications") {
-                            Task {
-                                await viewModel.requestNotifications()
+                            Button("Enable Notifications") {
+                                Task {
+                                    await viewModel.requestNotifications()
+                                }
                             }
                         }
                     }
+                    .font(.subheadline)
                 }
-                .font(.subheadline)
             }
 
             Spacer()
         }
         .padding(20)
         .onAppear {
-            Task {
-                await viewModel.refreshNotificationStatus()
+            if viewModel.notificationService != nil {
+                Task {
+                    await viewModel.refreshNotificationStatus()
+                }
             }
         }
     }

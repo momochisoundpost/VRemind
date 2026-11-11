@@ -13,16 +13,16 @@ public final class PreferencesWindowController: NSWindowController, NSWindowDele
         onFactoryReset: (() -> Void)? = nil
     ) {
         if let existing = currentController {
-            existing.window?.center()
             existing.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
+        let resolvedService = notificationService ?? NotificationService()
         let controller = PreferencesWindowController(
             preferencesStore: preferencesStore,
             channelStore: channelStore,
-            notificationService: notificationService,
+            notificationService: resolvedService,
             onFactoryReset: onFactoryReset
         )
         currentController = controller
@@ -47,10 +47,11 @@ public final class PreferencesWindowController: NSWindowController, NSWindowDele
         notificationService: NotificationService? = nil,
         onFactoryReset: (() -> Void)? = nil
     ) {
+        let resolvedService = notificationService ?? NotificationService()
         let viewModel = PreferencesViewModel(
             preferencesStore: preferencesStore,
             channelStore: channelStore,
-            notificationService: notificationService,
+            notificationService: resolvedService,
             onFactoryReset: onFactoryReset
         )
         let rootView = PreferencesView(viewModel: viewModel)

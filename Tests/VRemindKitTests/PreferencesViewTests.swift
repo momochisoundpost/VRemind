@@ -90,16 +90,32 @@ struct PreferencesViewTests {
         #expect(viewModel.authorizationStatus == .denied)
     }
 
-    @Test @MainActor func testPreferencesViewModelNilNotificationServiceIsSafe() async {
+    @Test @MainActor func testPreferencesViewModelDefaultNotificationServiceIsCreated() {
         let prefs = PreferencesStore(userDefaults: makeTestDefaults())
         let store = ChannelStore(userDefaults: makeTestDefaults())
         let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
 
+        #expect(viewModel.notificationService != nil)
+    }
+
+    @Test @MainActor func testPreferencesViewModelNilNotificationServiceIsSafe() async {
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let store = ChannelStore(userDefaults: makeTestDefaults())
+        let viewModel = PreferencesViewModel(
+            preferencesStore: prefs,
+            channelStore: store,
+            notificationService: nil
+        )
+
+        #expect(viewModel.notificationService == nil)
         #expect(viewModel.authorizationStatus == .notDetermined)
         await viewModel.refreshNotificationStatus()
         #expect(viewModel.authorizationStatus == .notDetermined)
         await viewModel.requestNotifications()
         #expect(viewModel.authorizationStatus == .notDetermined)
+
+        let view = PreferencesView(viewModel: viewModel)
+        _ = view.body
     }
 
     @Test @MainActor func testPreferencesViewRendersWithoutCrash() {
