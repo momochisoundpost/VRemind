@@ -570,4 +570,60 @@ struct StreamMonitorServiceTests {
             Issue.record("Expected @second to be live via queued refresh pass")
         }
     }
+
+    @Test @MainActor func testLiveStreamPollingPopulatesAndPersistsAvatarURL() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        _ = channelStore.addChannel(handle: "@live_vtuber", name: "Live VTuber", avatarURL: nil)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+
+        let liveHTMLWithAvatar = """
+        <html><body>
+        <script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":true,"title":"Live Concert","videoId":"live_concert_123","author":"Live VTuber"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true}}}};</script>
+        <script>var ytInitialData = {"videoSecondaryInfoRenderer":{"owner":{"videoOwnerRenderer":{"thumbnail":{"thumbnails":[{"url":"https://yt3.ggpht.com/live_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj","width":88,"height":88}]}}}}};</script>
+        </body></html>
+        """
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { url in
+                (Data(liveHTMLWithAvatar.utf8), make200Response(url: url))
+            }
+        )
+
+        await service.refreshAll()
+
+        let channel = channelStore.channels.first { $0.id == "@live_vtuber" }
+        #expect(channel?.avatarURL?.absoluteString == "https://yt3.ggpht.com/live_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj")
+    }
+
+    @Test @MainActor func testUpcomingStreamPollingPopulatesAndPersistsAvatarURL() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        _ = channelStore.addChannel(handle: "@upcoming_vtuber", name: "Upcoming VTuber", avatarURL: nil)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+
+        let upcomingHTMLWithEscapedAvatar = """
+        <script>var ytInitialPlayerResponse = {"videoDetails":{"isUpcoming":true,"title":"Upcoming Debut","videoId":"upcoming_debut_456","author":"Upcoming VTuber"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false}}}};</script>
+        <script>var ytInitialData = {"videoSecondaryInfoRenderer":{"owner":{"videoOwnerRenderer":{"thumbnail":{"thumbnails":[{"url":"https:\\/\\/yt3.ggpht.com\\/upcoming_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj"}]}}}}};</script>
+        """
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { url in
+                (Data(upcomingHTMLWithEscapedAvatar.utf8), make200Response(url: url))
+            }
+        )
+
+        await service.refreshAll()
+
+        let channel = channelStore.channels.first { $0.id == "@upcoming_vtuber" }
+        #expect(channel?.avatarURL?.absoluteString == "https://yt3.ggpht.com/upcoming_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj")
+    }
 }

@@ -3,6 +3,7 @@ import ServiceManagement
 import Testing
 @testable import VRemindKit
 
+@Suite(.serialized)
 struct LaunchAtLoginHelperTests {
 
     @Test func testLaunchAtLoginToggleState() {
