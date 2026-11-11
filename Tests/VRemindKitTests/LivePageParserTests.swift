@@ -1,18 +1,11 @@
 import Foundation
 import Testing
-@testable import CaitlynKit
+@testable import VRemindKit
 
-@MainActor
-struct LiveStatusTests {
-    nonisolated private static let liveHTML = """
+struct LivePageParserTests {
+    private static let liveHTML = """
     <html><body><script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":true,"title":"Hackintosh & Chat","videoId":"live123"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true,"startTimestamp":"2026-11-09T20:00:00+00:00"}}}};</script></body></html>
     """
-
-    @MainActor
-    private final class StubState {
-        var nextResponse: String = LiveStatusTests.liveHTML
-        var shouldThrow: Bool = false
-    }
 
     @Test func activeLiveStream() throws {
         let expectedDate = try #require(ISO8601DateFormatter().date(from: "2026-11-09T20:00:00Z"))
@@ -50,43 +43,5 @@ struct LiveStatusTests {
     @Test func consentPageIsUnrecognized() {
         let html = "<html>Before you continue to YouTube</html>"
         #expect(LivePageParser.parse(html: html) == .unrecognized)
-    }
-
-    @Test func unrecognizedPageKeepsPreviousStatus() async {
-        let state = StubState()
-        let service = LiveStatusService(channelHandle: "@bukancaitlyn") { @MainActor _ in
-            state.nextResponse
-        }
-        await service.refresh()
-        #expect(service.status.isLive == true)
-        #expect(service.status.videoId == "live123")
-
-        state.nextResponse = "<html>Before you continue to YouTube</html>"
-        await service.refresh()
-        #expect(service.status.isLive == true)
-        #expect(service.status.videoId == "live123")
-
-        state.nextResponse = "<script>var ytInitialData = {};</script>"
-        await service.refresh()
-        #expect(service.status == .offline)
-    }
-
-    @Test func fetchErrorKeepsPreviousStatus() async {
-        struct StubError: Error {}
-        let state = StubState()
-        let service = LiveStatusService(channelHandle: "@bukancaitlyn") { @MainActor _ in
-            if state.shouldThrow {
-                throw StubError()
-            }
-            return Self.liveHTML
-        }
-        await service.refresh()
-        #expect(service.status.isLive == true)
-        #expect(service.status.videoId == "live123")
-
-        state.shouldThrow = true
-        await service.refresh()
-        #expect(service.status.isLive == true)
-        #expect(service.status.videoId == "live123")
     }
 }

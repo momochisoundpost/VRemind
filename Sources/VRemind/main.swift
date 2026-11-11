@@ -1,5 +1,5 @@
 import AppKit
-import CaitlynKit
+import VRemindKit
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

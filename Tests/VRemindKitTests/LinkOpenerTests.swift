@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CaitlynKit
+@testable import VRemindKit
 
 struct LinkOpenerTests {
     @Test func videoURLFormat() {

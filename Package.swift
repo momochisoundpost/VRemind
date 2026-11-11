@@ -2,24 +2,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "CaitlynSwift",
+    name: "VRemind",
     platforms: [.macOS(.v12)],
     products: [
-        .library(name: "CaitlynKit", targets: ["CaitlynKit"]),
-        .executable(name: "CaitlynSwift", targets: ["CaitlynSwift"]),
+        .library(name: "VRemindKit", targets: ["VRemindKit"]),
+        .executable(name: "VRemind", targets: ["VRemind"]),
     ],
     targets: [
         .target(
-            name: "CaitlynKit",
-            resources: [.process("Resources")]
+            name: "VRemindKit"
         ),
         .executableTarget(
-            name: "CaitlynSwift",
-            dependencies: ["CaitlynKit"]
+            name: "VRemind",
+            dependencies: ["VRemindKit"]
         ),
         .testTarget(
-            name: "CaitlynKitTests",
-            dependencies: ["CaitlynKit"]
+            name: "VRemindKitTests",
+            dependencies: ["VRemindKit"]
         ),
     ]
 )

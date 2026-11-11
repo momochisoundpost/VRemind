@@ -5,15 +5,15 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Caitlyn Companion</string>
+    <string>VRemind</string>
     <key>CFBundleExecutable</key>
-    <string>CaitlynSwift</string>
+    <string>VRemind</string>
     <key>CFBundleIdentifier</key>
-    <string>com.y2karyl.caitlynswift</string>
+    <string>com.caitlyn.vremind</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Caitlyn Companion</string>
+    <string>VRemind</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

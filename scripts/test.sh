@@ -4,7 +4,7 @@
 # CLT ships Testing.framework outside SwiftPM's default search paths, so we
 # point the compiler/linker at it. Caches are redirected into .build so the
 # script also works inside restricted sandboxes. Extra args are passed through
-# (e.g. scripts/test.sh --filter ModelTests).
+# (e.g. scripts/test.sh --filter LivePageParserTests).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
