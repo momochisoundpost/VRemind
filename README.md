@@ -1,52 +1,122 @@
-# Caitlyn Companion (`CaitlynSwift`)
+# VRemind
 
-A lightweight native macOS 12+ (Monterey and newer) desktop companion app for independent VTuber **Caitlyn Momochi** ([@bukancaitlyn](https://www.youtube.com/@bukancaitlyn) / [@Y2Karyl](https://x.com/Y2Karyl)).
+A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero external dependencies.
 
-## Features
+VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and content creators on YouTube, alerts you with desktop notifications the moment they go live or schedule an upcoming waiting room, and lets you jump straight into the stream with a single click.
 
-- **Menu Bar Live Indicator & 3-Slot VTuber Watchlist (`NSStatusItem` + `NSPopover`)**: Sits quietly in the macOS menu bar (`sparkles` when offline, red `dot.radiowaves.left.and.right` when any watched VTuber is live on YouTube). Slot 1 is permanently pinned to Caitlyn Momochi with their channel profile picture, and you can add up to 2 additional VTubers by `@handle` (persisted in `UserDefaults`). Polls `/live` every 3 minutes (pausing while displays sleep) and shows live stream titles, uptime, or time since last stream.
-- **Main Hub Window**:
-  - **Live & Replays**: Paginated stream archive grid (8 VODs per page, 30 bundled VODs) sorted newest-first with 1-click launch in your default browser.
-  - **Cait-pedia**: Searchable, category-filtered glossary of Caitlyn's lore, eras, and chat memes.
-  - **Clip Roulette**: Spin to land on a random highlight clip without immediate repeats.
-- **Hybrid Offline + Remote Sync**: Boots immediately from the bundled `caitlyn_hub.json` seed, then syncs the latest copy from GitHub Raw and caches it in `~/Library/Application Support/CaitlynSwift/caitlyn_hub.json`.
+---
+
+## Key Features
+
+- **Unlimited VTuber Watchlist**:
+  - Add any VTuber or creator by their YouTube `@handle` (e.g. `@bukancaitlyn`, `@filian`, `@ironmouse`).
+  - Pre-seeded with **Caitlyn Momochi** ([@bukancaitlyn](https://www.youtube.com/@bukancaitlyn)) as the default/example starter channel (fully editable and removable).
+  - Inline handle validation: automatically formats handles, verifies valid channel syntax, and prevents duplicate entries.
+  - Watchlist channels and metadata are persisted locally via `UserDefaults`.
+
+- **Live & Upcoming Stream Detection**:
+  - **Zero API Keys Required**: Lightweight regex-based HTML scraping of YouTube `/live` pages extracts stream titles, video IDs, upcoming start times, and channel avatars without requiring YouTube Data API quotas or Google Cloud credentials.
+  - **Rich Status Tracking**:
+    - `🔴 LIVE`: Highlights active broadcasts with title, elapsed uptime, and direct watch link.
+    - `🗓️ UPCOMING`: Shows scheduled waiting rooms and stream start times (e.g., `in 45m`).
+    - `Offline`: Displays time elapsed since the channel last streamed.
+  - **Smart Concurrency & Power Management**: Concurrency is bounded to a maximum of 3 concurrent network requests to prevent rate limiting. Background polling automatically pauses when displays go to sleep and resumes immediately upon display wake.
+  - **Dynamic Menu Bar Icon**: The menu bar icon changes dynamically (`dot.radiowaves.left.and.right` in vibrant red when any watched channel is live, or a subtle `bell` when all channels are offline).
+
+- **Native macOS Desktop Notifications**:
+  - Powered by Apple's `UserNotifications` framework (`UNUserNotificationCenter`).
+  - Independent toggles for live broadcasts (`🔴 LIVE`) and scheduled waiting rooms (`🗓️ UPCOMING`).
+  - Notification sound toggle (`Play sound`).
+  - Smart deduplication by video ID prevents duplicate alerts for the same stream.
+  - Click-to-open: Clicking an alert launches the stream directly in your default web browser.
+
+- **First-Run & Post-Reset Welcome / Onboarding Window**:
+  - Automatically welcomes first-time users or opens after a factory reset.
+  - Introduces the app, provides a quick handle entry to add your favorite VTuber (or keep the default Caitlyn Momochi starter channel), and requests notification authorization with one click.
+
+- **Preferences Window (`⌘,`)**:
+  - **General Tab**:
+    - **Launch at Login**: Integrates with modern `SMAppService` on macOS 13+ (Ventura and newer) with an automatic fallback to Monterey-compatible AppleScript login item management on macOS 12.
+    - **Factory Reset**: Restores channels and settings to their initial default state with double-confirmation protection.
+  - **Notifications Tab**:
+    - Granular controls for Live alerts, Upcoming stream reminders, and notification sounds.
+    - Live system authorization status badge with one-click access to macOS System Settings.
+  - **About Tab**:
+    - Backstory: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"*
+    - Open-source philosophy: *"You don't like what I did? Go fork yourself, it's free and open source."*
+    - Quick links to Caitlyn Momochi's [YouTube](https://www.youtube.com/@bukancaitlyn), [X / Twitter](https://x.com/Y2Karyl), and GitHub.
+
+---
+
+## Architecture Overview
+
+VRemind is structured into a reusable core library target and a lightweight executable target:
+
+```text
+CaitlynSwift/
+├── Sources/
+│   ├── VRemindKit/               # Core framework library
+│   │   ├── Models/               # WatchedChannel, StreamStatus, AppSettings
+│   │   ├── Services/             # StreamMonitorService, NotificationService, LaunchAtLoginHelper
+│   │   ├── Stores/               # ChannelStore, PreferencesStore (ObservableObject persistence)
+│   │   ├── Parsers/              # LivePageParser (YouTube /live HTML scraper)
+│   │   ├── Utilities/            # LinkOpener, ElapsedTime, AppConstants
+│   │   └── Views/                # SwiftUI views (MenuBarView, PreferencesView, OnboardingView)
+│   └── VRemindApp/               # Application executable
+│       └── AppDelegate.swift     # NSApplicationDelegate, NSStatusItem, NSPopover, Sleep/Wake
+├── Tests/
+│   └── VRemindKitTests/          # Swift Testing suite (90+ comprehensive unit and view tests)
+├── Resources/
+│   └── Info.plist                # App bundle metadata (LSUIElement = true for menu bar only)
+└── scripts/
+    ├── test.sh                   # Test runner script (supports Xcode CLT)
+    └── build-app.sh              # Universal binary build and release packager
+```
+
+- **`VRemindKit`**: Contains all business logic, HTML scraping, notification management, persistence, and SwiftUI UI components. Decoupled from application lifecycle to allow thorough automated testing.
+- **`VRemindApp`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, and window controllers for Preferences and Onboarding. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
+
+---
+
+## Requirements
+
+- **Operating System**: macOS 12.0 (Monterey) or newer (Universal: Apple Silicon & Intel x86_64).
+- **Build Tools**: Xcode Command Line Tools (no full Xcode IDE installation required).
+
+---
 
 ## Running Tests
 
-Only Xcode Command Line Tools are required (no full Xcode installation needed):
+Run the full automated test suite using Swift Testing:
 
 ```bash
 bash scripts/test.sh
 ```
 
-Pass extra arguments through to `swift test` if needed (for example, `bash scripts/test.sh --filter HubLogicTests`).
+You can also pass arguments through to `swift test`, such as running specific suites or tests:
 
-## Building `CaitlynSwift.app`
+```bash
+bash scripts/test.sh --filter LivePageParserTests
+```
+
+---
+
+## Building the Release Application
+
+To compile the universal release binary and assemble `build/VRemind.app`:
 
 ```bash
 bash scripts/build-app.sh
 ```
 
-This builds a release universal binary (falling back to the host architecture if cross-compilation isn't available), packages `build/CaitlynSwift.app` with `Resources/Info.plist` and the `CaitlynSwift_CaitlynKit.bundle` resource bundle, and ad-hoc signs the bundle.
+This script:
+1. Compiles optimized release binaries for both `arm64` (Apple Silicon) and `x86_64` (Intel).
+2. Merges them into a universal Mach-O binary using `lipo`.
+3. Packages the `VRemind.app` bundle with `Contents/Info.plist`.
+4. Applies ad-hoc code signing (`codesign --force --deep --sign -`).
 
-To launch the built app:
+To launch the built application:
 
 ```bash
-open build/CaitlynSwift.app
+open build/VRemind.app
 ```
-
-## Updating Lore, Replays, and Clips (`caitlyn_hub.json`)
-
-The bundled seed lives at:
-
-```text
-Sources/CaitlynKit/Resources/caitlyn_hub.json
-```
-
-On launch, the app also checks the remote config URL defined in `Sources/CaitlynKit/AppConstants.swift`:
-
-```text
-https://raw.githubusercontent.com/Y2Karyl/CaitlynSwift/main/caitlyn_hub.json
-```
-
-Publish an updated `caitlyn_hub.json` at the root of the `main` branch of `Y2Karyl/CaitlynSwift` (using ISO-8601 UTC dates like `"2026-11-05T12:00:00Z"`) to roll out new lore entries, VOD replays, or roulette clips without shipping a new app binary.

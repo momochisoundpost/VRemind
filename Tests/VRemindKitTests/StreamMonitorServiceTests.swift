@@ -463,12 +463,20 @@ struct StreamMonitorServiceTests {
         )
 
         service?.startPolling(interval: 0.05)
-        try await Task.sleep(nanoseconds: 70_000_000)
+        for _ in 0..<50 {
+            if fetchCount.get() >= 1 { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
         let countBefore = fetchCount.get()
         #expect(countBefore >= 1)
 
         // Deallocate without explicit stopPolling()
         service = nil
+
+        for _ in 0..<50 {
+            if spyCenter.removedObserversCount == 2 { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
 
         // Both sleepObserver and wakeObserver should be removed in deinit
         #expect(spyCenter.removedObserversCount == 2)
