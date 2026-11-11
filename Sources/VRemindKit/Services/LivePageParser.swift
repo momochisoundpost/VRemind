@@ -24,11 +24,10 @@ public enum LivePageParser {
 
             let author = (videoDetails?["author"] as? String).flatMap { cleanTitle($0) }
             let channelTitle = author ?? extractChannelTitleFromTags(from: html)
-            let avatarURL = extractAvatarURL(from: html)
 
             if (isLive || isLiveNow) && !isUpcoming {
                 guard let videoId = videoDetails?["videoId"] as? String, !videoId.isEmpty else {
-                    return .notLive(channelTitle: channelTitle, avatarURL: avatarURL)
+                    return .notLive(channelTitle: channelTitle, avatarURL: extractAvatarURL(from: html))
                 }
                 let title = (videoDetails?["title"] as? String) ?? ""
                 let startedAt: Date?
@@ -42,7 +41,7 @@ public enum LivePageParser {
 
             if isUpcoming {
                 guard let videoId = videoDetails?["videoId"] as? String, !videoId.isEmpty else {
-                    return .notLive(channelTitle: channelTitle, avatarURL: avatarURL)
+                    return .notLive(channelTitle: channelTitle, avatarURL: extractAvatarURL(from: html))
                 }
                 let title = (videoDetails?["title"] as? String) ?? ""
                 let scheduledStartTime: Date?
@@ -54,7 +53,7 @@ public enum LivePageParser {
                 return .upcoming(videoId: videoId, title: title, scheduledStartTime: scheduledStartTime)
             }
 
-            return .notLive(channelTitle: channelTitle, avatarURL: avatarURL)
+            return .notLive(channelTitle: channelTitle, avatarURL: extractAvatarURL(from: html))
         }
 
         if html.contains("ytInitialData") {
@@ -68,13 +67,14 @@ public enum LivePageParser {
     public static func extractAvatarURL(from html: String) -> URL? {
         if let ownerMarkerRange = html.range(of: "videoOwnerRenderer") ?? html.range(of: "\"owner\":") {
             let searchSlice = html[ownerMarkerRange.upperBound...]
-            let searchLength = min(1500, searchSlice.count)
-            let limitedEnd = searchSlice.index(searchSlice.startIndex, offsetBy: searchLength)
-            if let avatar = findAvatarURL(in: searchSlice[..<limitedEnd]) {
-                return avatar
+            let limitedEnd = searchSlice.index(searchSlice.startIndex, offsetBy: 1500, limitedBy: searchSlice.endIndex) ?? searchSlice.endIndex
+            let ownerAvatars = findAllAvatarURLs(in: searchSlice[..<limitedEnd])
+            // YouTube orders thumbnails in ascending resolution; prefer the largest available thumbnail
+            if let best = ownerAvatars.last {
+                return best
             }
         }
-        return findAvatarURL(in: html[...])
+        return findAllAvatarURLs(in: html[...]).first
     }
 
     private static let avatarPrefixes: [(prefix: String, isEscaped: Bool)] = [
@@ -88,35 +88,46 @@ public enum LivePageParser {
         ("https:\\/\\/yt4.googleusercontent.com\\/", true)
     ]
 
-    private static func findAvatarURL(in slice: Substring) -> URL? {
-        var earliestMatch: (range: Range<Substring.Index>, isEscaped: Bool)? = nil
+    private static func findAllAvatarURLs(in slice: Substring) -> [URL] {
+        var results: [URL] = []
+        var currentSlice = slice
 
-        for item in avatarPrefixes {
-            if let range = slice.range(of: item.prefix) {
-                if let currentEarliest = earliestMatch {
-                    if range.lowerBound < currentEarliest.range.lowerBound {
+        while !currentSlice.isEmpty {
+            var earliestMatch: (range: Range<Substring.Index>, isEscaped: Bool)? = nil
+
+            for item in avatarPrefixes {
+                if let range = currentSlice.range(of: item.prefix) {
+                    if let currentEarliest = earliestMatch {
+                        if range.lowerBound < currentEarliest.range.lowerBound {
+                            earliestMatch = (range, item.isEscaped)
+                        }
+                    } else {
                         earliestMatch = (range, item.isEscaped)
                     }
-                } else {
-                    earliestMatch = (range, item.isEscaped)
                 }
             }
-        }
 
-        guard let match = earliestMatch else {
-            return nil
-        }
+            guard let match = earliestMatch else { break }
 
-        let remainder = slice[match.range.lowerBound...]
-        let endIdx = remainder.firstIndex { char in
-            char == "\"" || char == "'" || char == " " || char == ">" || char == "<" || (!match.isEscaped && char == "\\")
-        } ?? remainder.endIndex
+            let remainder = currentSlice[match.range.lowerBound...]
+            let endIdx = remainder.firstIndex { char in
+                char == "\"" || char == "'" || char == " " || char == ">" || char == "<" || (!match.isEscaped && char == "\\")
+            } ?? remainder.endIndex
 
-        var urlString = String(remainder[..<endIdx])
-        if match.isEscaped {
-            urlString = urlString.replacingOccurrences(of: "\\/", with: "/")
+            var urlString = String(remainder[..<endIdx])
+            if match.isEscaped {
+                urlString = urlString.replacingOccurrences(of: "\\/", with: "/")
+            }
+            if let url = URL(string: urlString) {
+                results.append(url)
+            }
+            if endIdx < currentSlice.endIndex {
+                currentSlice = currentSlice[currentSlice.index(after: endIdx)...]
+            } else {
+                break
+            }
         }
-        return URL(string: urlString)
+        return results
     }
 
     public static func extractChannelTitle(from html: String) -> String? {
