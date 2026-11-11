@@ -30,7 +30,7 @@ The developer is actively "building in public" on Twitter. The app must be polis
 - **Settings & Preferences Dialog (`⌘,`)**:
   - **General Tab**: Launch at Login toggle (`SMAppService` / `SMLoginItemSetEnabled`) and a "Factory Reset" button with confirmation alert.
   - **Notifications Tab**: Independent toggles for "Notify when live on air", "Notify for upcoming streams / waiting rooms", and notification sound.
-  - **About Tab**: Attribution copy: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"* with clickable social media links.
+  - **About Tab**: Attribution copy: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"* and *"You don't like what I did? Go fork yourself, it's free and open source."* with clickable social media links.
 - **Rate-Limited Background Polling**: Fetch channel live pages in polite concurrent batches (pool of 3) every 3 minutes while displays are active; pause polling during display sleep.
 - **Production Quality**: Clean separation of concerns, high test coverage for parsers and data management, zero external third-party dependencies, and automated build scripts (`scripts/build-app.sh`).
 
@@ -203,6 +203,7 @@ flowchart TD
   3. **About**:
      - App icon and title: "VRemind 1.0".
      - Copy: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video."*
+     - Sub-copy: *"You don't like what I did? Go fork yourself, it's free and open source."*
      - Clickable links to YouTube channel and Twitter/X profile.
 
 ---

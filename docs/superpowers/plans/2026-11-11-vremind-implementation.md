@@ -17,7 +17,7 @@
 - Zero third-party SPM or CocoaPods package dependencies.
 - Build toolchain: Must build and test using standard Xcode Command Line Tools (`swift build`, `swift test`, `bash scripts/test.sh`, `bash scripts/build-app.sh`).
 - Default example channel: Caitlyn Momochi (`@bukancaitlyn`) pre-seeded as an editable, removable starting example.
-- Attribution copy in About: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"*.
+- Attribution copy in About: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"* and *"You don't like what I did? Go fork yourself, it's free and open source."*.
 
 ## Review Focus
 
@@ -582,7 +582,7 @@ Expected: FAIL.
 
 - Tab 1: **General**: Launch at login toggle, Factory Reset with confirmation modal alert.
 - Tab 2: **Notifications**: Checkboxes for Live alerts, Upcoming alerts, Sound alerts.
-- Tab 3: **About**: Title, version, copy: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"*, clickable links to YouTube and Twitter/X.
+- Tab 3: **About**: Title, version, copy: *"VRemind by Caitlyn Momochi, initially vibecoded for their Hackintosh video"* and *"You don't like what I did? Go fork yourself, it's free and open source."*, clickable links to YouTube and Twitter/X.
 
 - [ ] **Step 4: Run test to verify pass**
 
