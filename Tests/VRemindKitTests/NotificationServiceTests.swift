@@ -179,4 +179,77 @@ struct NotificationServiceTests {
         let service = NotificationService()
         #expect(service.authorizationStatus == .notDetermined)
     }
+
+    @Test("NotificationService posts update available notification payload")
+    @MainActor
+    func testUpdateNotificationPayload() {
+        let service = NotificationService()
+        let release = GitHubRelease(
+            tagName: "v1.0.2",
+            name: "v1.0.2 — Improvements",
+            body: "Notes",
+            htmlURL: URL(string: "https://github.com")!,
+            publishedAt: nil,
+            assets: []
+        )
+
+        let request = service.makeUpdateNotificationRequest(release: release)
+        #expect(request.content.title == "VRemind Update Available")
+        #expect(request.content.body.contains("1.0.2"))
+        #expect(request.content.userInfo["tagName"] as? String == "v1.0.2")
+        #expect(request.content.userInfo["isUpdateNotification"] as? Bool == true)
+        #expect(request.content.categoryIdentifier == NotificationService.updateCategoryIdentifier)
+        #expect(request.identifier == NotificationService.updateCategoryIdentifier)
+    }
+
+    @Test("NotificationService notifyUpdate posts request to notification center")
+    @MainActor
+    func testNotifyUpdatePostsRequest() async throws {
+        let mockCenter = MockNotificationCenter()
+        let service = NotificationService(center: mockCenter)
+        let release = GitHubRelease(
+            tagName: "v1.0.3",
+            name: "v1.0.3",
+            body: "Release Notes",
+            htmlURL: URL(string: "https://github.com")!,
+            publishedAt: nil,
+            assets: []
+        )
+
+        await service.notifyUpdate(release: release)
+        #expect(mockCenter.requests.count == 1)
+        let request = try #require(mockCenter.requests.first)
+        #expect(request.identifier == NotificationService.updateCategoryIdentifier)
+        #expect(request.content.title == "VRemind Update Available")
+        #expect(request.content.userInfo["tagName"] as? String == "v1.0.3")
+    }
+
+    @Test("NotificationService handleNotificationClick invokes update callback for update notification")
+    @MainActor
+    func testHandleNotificationClickInvokesUpdateCallback() {
+        var clickedRelease: GitHubRelease? = nil
+        var callbackInvoked = false
+
+        let service = NotificationService(
+            center: MockNotificationCenter(),
+            onUpdateClicked: { release in
+                callbackInvoked = true
+                clickedRelease = release
+            }
+        )
+
+        let release = GitHubRelease(
+            tagName: "v1.0.4",
+            name: "v1.0.4",
+            body: "Notes",
+            htmlURL: URL(string: "https://github.com/test")!,
+            publishedAt: nil,
+            assets: []
+        )
+        let request = service.makeUpdateNotificationRequest(release: release)
+
+        service.handleNotificationClick(userInfo: request.content.userInfo)
+        #expect(callbackInvoked == true)
+        #expect(clickedRelease?.tagName == "v1.0.4")
+    }
 }

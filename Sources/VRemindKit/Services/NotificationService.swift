@@ -74,16 +74,21 @@ public final class NoOpNotificationCenter: NotificationCenterProtocol {
 
 @MainActor
 public final class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
+    public static let updateCategoryIdentifier = "VREMIND_UPDATE_AVAILABLE"
+    public static let updateNotificationCategory = "VREMIND_UPDATE_AVAILABLE"
+
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     public private(set) var liveNotificationCount: Int = 0
     public private(set) var upcomingNotificationCount: Int = 0
 
     public let center: NotificationCenterProtocol
     private let urlOpener: (URL) -> Void
+    public var onUpdateClicked: ((GitHubRelease?) -> Void)?
 
     public init(
         center: NotificationCenterProtocol? = nil,
-        urlOpener: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
+        urlOpener: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
+        onUpdateClicked: ((GitHubRelease?) -> Void)? = nil
     ) {
         let resolvedCenter: NotificationCenterProtocol
         if let center = center {
@@ -95,6 +100,7 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         }
         self.center = resolvedCenter
         self.urlOpener = urlOpener
+        self.onUpdateClicked = onUpdateClicked
         super.init()
         self.center.delegate = self
     }
@@ -175,12 +181,85 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
     }
 
     public func handleNotificationClick(userInfo: [AnyHashable: Any]) {
+        if let isUpdate = userInfo["isUpdateNotification"] as? Bool, isUpdate {
+            let release = Self.decodeRelease(from: userInfo)
+            onUpdateClicked?(release)
+            return
+        } else if userInfo["isUpdateNotification"] != nil {
+            let release = Self.decodeRelease(from: userInfo)
+            onUpdateClicked?(release)
+            return
+        }
+
         guard let videoId = userInfo["videoId"] as? String,
               !videoId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let url = URL(string: "https://www.youtube.com/watch?v=\(videoId)") else {
             return
         }
         urlOpener(url)
+    }
+
+    public func makeUpdateNotificationRequest(release: GitHubRelease) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = "VRemind Update Available"
+        content.body = "Version \(release.tagName) is available on GitHub. Click to view release notes and download."
+        content.categoryIdentifier = Self.updateCategoryIdentifier
+        content.sound = .default
+
+        var userInfo: [String: Any] = [
+            "isUpdateNotification": true,
+            "tagName": release.tagName,
+            "htmlURL": release.htmlURL.absoluteString
+        ]
+        if let name = release.name {
+            userInfo["name"] = name
+        }
+        if let body = release.body {
+            userInfo["body"] = body
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(release),
+           let jsonString = String(data: data, encoding: .utf8) {
+            userInfo["releaseJSON"] = jsonString
+        }
+        content.userInfo = userInfo
+
+        return UNNotificationRequest(
+            identifier: Self.updateCategoryIdentifier,
+            content: content,
+            trigger: nil
+        )
+    }
+
+    public func notifyUpdate(release: GitHubRelease) async {
+        let request = makeUpdateNotificationRequest(release: release)
+        do {
+            try await center.add(request)
+        } catch {
+            // Silently handle error or log
+        }
+    }
+
+    private static func decodeRelease(from userInfo: [AnyHashable: Any]) -> GitHubRelease? {
+        if let jsonString = userInfo["releaseJSON"] as? String,
+           let data = jsonString.data(using: .utf8) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let decoded = try? decoder.decode(GitHubRelease.self, from: data) {
+                return decoded
+            }
+        }
+        if let tagName = userInfo["tagName"] as? String {
+            let htmlURL = (userInfo["htmlURL"] as? String).flatMap { URL(string: $0) } ?? URL(string: "https://github.com")!
+            return GitHubRelease(
+                tagName: tagName,
+                name: userInfo["name"] as? String,
+                body: userInfo["body"] as? String,
+                htmlURL: htmlURL
+            )
+        }
+        return nil
     }
 
     // MARK: - UNUserNotificationCenterDelegate

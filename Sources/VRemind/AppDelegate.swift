@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var notificationService: NotificationService!
     var monitorService: StreamMonitorService!
     var updateService: UpdateService!
+    var updateTimer: Timer?
+    var latestAvailableRelease: GitHubRelease?
 
     private var cancellables = Set<AnyCancellable>()
     private var flashTimer: Timer?
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.monitorService = monitorService
         self.updateService = updateService
 
+        setupNotificationHandling()
         setupStatusItem()
         setupPopover()
         setupObservations()
@@ -52,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         flashTimer?.invalidate()
         flashTimer = nil
+        stopPeriodicUpdateChecks()
         monitorService?.stopPolling()
     }
 
@@ -148,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if response == .alertFirstButtonReturn {
                 preferencesStore.settings.updateConsent = .allowed
                 performLaunchUpdateCheck()
+                startPeriodicUpdateChecksIfNeeded()
             } else {
                 if checkbox.state == .on {
                     preferencesStore.settings.updateConsent = .neverAsk
@@ -155,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case .allowed:
             performLaunchUpdateCheck()
+            startPeriodicUpdateChecksIfNeeded()
         case .neverAsk:
             break
         }
@@ -165,7 +171,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let result = await self.updateService.checkForUpdates(manual: false)
             if case .updateAvailable(let release) = result {
+                self.latestAvailableRelease = release
                 UpdateAvailableWindowController.show(release: release, preferencesStore: self.preferencesStore)
+            }
+        }
+    }
+
+    func startPeriodicUpdateChecksIfNeeded() {
+        guard preferencesStore.settings.updateConsent == .allowed else { return }
+        guard updateTimer == nil else { return }
+
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.performPeriodicUpdateCheck()
+            }
+        }
+    }
+
+    func stopPeriodicUpdateChecks() {
+        updateTimer?.invalidate()
+        updateTimer = nil
+    }
+
+    func performPeriodicUpdateCheck() async {
+        guard preferencesStore.settings.updateConsent == .allowed else { return }
+        let result = await updateService.checkForUpdates(manual: false)
+        if case .updateAvailable(let release) = result {
+            self.latestAvailableRelease = release
+            await notificationService.notifyUpdate(release: release)
+        }
+    }
+
+    private func setupNotificationHandling() {
+        notificationService.onUpdateClicked = { [weak self] release in
+            guard let self else { return }
+            let targetRelease = release ?? self.latestAvailableRelease
+            if let targetRelease {
+                UpdateAvailableWindowController.show(release: targetRelease, preferencesStore: self.preferencesStore)
+            } else if case .updateAvailable(let rel) = self.updateService.lastResult {
+                UpdateAvailableWindowController.show(release: rel, preferencesStore: self.preferencesStore)
             }
         }
     }
@@ -186,6 +231,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateStatusButton()
+            }
+            .store(in: &cancellables)
+
+        preferencesStore.$settings
+            .map { $0.updateConsent }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] consent in
+                if consent == .allowed {
+                    self?.startPeriodicUpdateChecksIfNeeded()
+                } else {
+                    self?.stopPeriodicUpdateChecks()
+                }
             }
             .store(in: &cancellables)
     }
