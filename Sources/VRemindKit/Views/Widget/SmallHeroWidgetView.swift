@@ -15,10 +15,12 @@ extension View {
                 content()
             }
         } else {
-            self.background(content())
+            self.padding(12)
+                .background(content())
         }
         #else
-        self.background(content())
+        self.padding(12)
+            .background(content())
         #endif
     }
 }
@@ -135,27 +137,24 @@ public struct SmallHeroWidgetView: View {
 
     @ViewBuilder
     private func contentBody(isMonochrome: Bool) -> some View {
-        GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 0) {
-                topStatusHeader(isMonochrome: isMonochrome)
-                Spacer(minLength: 4)
-                bottomContent(isMonochrome: isMonochrome)
-            }
-            .padding(12)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
-            .widgetContainerBackground {
-                ZStack {
-                    backgroundLayer(size: geometry.size, isMonochrome: isMonochrome)
+        VStack(alignment: .leading, spacing: 0) {
+            topStatusHeader(isMonochrome: isMonochrome)
+            Spacer(minLength: 4)
+            bottomContent(isMonochrome: isMonochrome)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .widgetContainerBackground {
+            ZStack {
+                backgroundLayer(isMonochrome: isMonochrome)
 
-                    LinearGradient(
-                        gradient: Gradient(colors: isMonochrome
-                            ? [.white.opacity(0.0), .white.opacity(0.2), .white.opacity(0.55)]
-                            : [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.95)]
-                        ),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
+                LinearGradient(
+                    gradient: Gradient(colors: isMonochrome
+                        ? [.white.opacity(0.0), .white.opacity(0.2), .white.opacity(0.55)]
+                        : [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.95)]
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
         }
     }
@@ -163,36 +162,38 @@ public struct SmallHeroWidgetView: View {
     // MARK: - Subviews
 
     @ViewBuilder
-    private func backgroundLayer(size: CGSize, isMonochrome: Bool = false) -> some View {
+    private func backgroundLayer(isMonochrome: Bool = false) -> some View {
         if let nsImage = WidgetAvatarLoader.loadNSImage(filename: channel?.avatarFilename, in: avatarsDirectoryURL) {
             Image(nsImage: nsImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: size.width, height: size.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .saturation(isDimmed ? 0.2 : 1.0)
                 .opacity(isDimmed ? 0.6 : 1.0)
                 .clipped()
         } else {
             // High-contrast monogram fallback
-            ZStack {
-                LinearGradient(
-                    colors: isMonochrome
-                        ? [Color(white: 0.88), Color(white: 0.72)]
-                        : (isDimmed
-                            ? [Color(white: 0.25), Color(white: 0.12)]
-                            : [Theme.accent, Color.purple.opacity(0.7), Color.black.opacity(0.8)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .saturation(isDimmed ? 0.2 : 1.0)
-                .opacity(isDimmed ? 0.6 : 1.0)
+            GeometryReader { geo in
+                ZStack {
+                    LinearGradient(
+                        colors: isMonochrome
+                            ? [Color(white: 0.88), Color(white: 0.72)]
+                            : (isDimmed
+                                ? [Color(white: 0.25), Color(white: 0.12)]
+                                : [Theme.accent, Color.purple.opacity(0.7), Color.black.opacity(0.8)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .saturation(isDimmed ? 0.2 : 1.0)
+                    .opacity(isDimmed ? 0.6 : 1.0)
 
-                Text(monogramLetter)
-                    .font(.system(size: min(size.width, size.height) * 0.44, weight: .black, design: .rounded))
-                    .foregroundColor(isMonochrome ? .black.opacity(0.35) : .white.opacity(isDimmed ? 0.4 : 0.6))
-                    .shadow(color: isMonochrome ? .clear : .black.opacity(0.5), radius: 6, x: 0, y: 3)
+                    Text(monogramLetter)
+                        .font(.system(size: min(geo.size.width, geo.size.height) * 0.44, weight: .black, design: .rounded))
+                        .foregroundColor(isMonochrome ? .black.opacity(0.35) : .white.opacity(isDimmed ? 0.4 : 0.6))
+                        .shadow(color: isMonochrome ? .clear : .black.opacity(0.5), radius: 6, x: 0, y: 3)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(width: size.width, height: size.height)
         }
     }
 
