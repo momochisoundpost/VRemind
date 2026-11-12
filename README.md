@@ -39,7 +39,7 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
     - `🗓️ UPCOMING`: Shows scheduled waiting rooms and stream start times (e.g., `in 45m`).
     - `Offline`: Displays time elapsed since the channel last streamed.
   - **Smart Concurrency & Power Management**: Concurrency is bounded to a maximum of 3 concurrent network requests to prevent rate limiting. Background polling automatically pauses when displays go to sleep and resumes immediately upon display wake.
-  - **Dynamic Menu Bar Icon**: The menu bar icon changes dynamically (`dot.radiowaves.left.and.right` in vibrant red when any watched channel is live, or a subtle `bell` when all channels are offline).
+  - **Dynamic Menu Bar Icon**: The menu bar icon changes dynamically (`dot.radiowaves.left.and.right` in vibrant green when any watched channel is live, or a subtle `bell` when all channels are offline).
 
 - **Native macOS Desktop Notifications**:
   - Powered by Apple's `UserNotifications` framework (`UNUserNotificationCenter`).
