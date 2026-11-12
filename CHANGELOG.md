@@ -12,7 +12,7 @@ What started as a vibecoded menu bar app meant for B-roll footage in a Hackintos
 #### 🎨 Native macOS Desktop Widgets (WidgetKit)
 - **Small Hero Widget (`systemSmall`):**
   - **Edge-to-Edge Avatar Backdrop:** The creator's profile picture fills the entire widget edge-to-edge with a clean fill-crop and dark gradient scrim.
-  - **Adaptive Desktop Contrast & Liquid Glass Respect:** On macOS 27 (Golden Gate), desktop widgets shift to an ambient monochrome or tinted state when application windows are focused. VRemind dynamically adapts via `@Environment(\.widgetRenderingMode)`—switching typography and status badges to solid high-contrast black so stream titles and live status remain glanceable at all times while fully respecting the user's system liquid glass preferences.
+  - **Adaptive Desktop Contrast:** On macOS Sonoma (or newer), desktop widgets shift to an ambient monochrome or tinted state when application windows are focused. VRemind dynamically adapts via `@Environment(\.widgetRenderingMode)`—switching typography and status badges to solid high-contrast black so stream titles and live status remain glanceable at all times.
 - **Medium Watchlist Widget (`systemMedium`):** Quick-grid status view with side-by-side stream titles and countdown timers.
 - **Large Dashboard Widget (`systemLarge`):** Prominent featured live hero card alongside a full multi-channel watchlist overview.
 - **One-Click Deep Linking (`vremind://open-stream`):** Tapping any widget instantly launches the live broadcast in your default browser.
@@ -20,6 +20,7 @@ What started as a vibecoded menu bar app meant for B-roll footage in a Hackintos
 #### 🖱️ Menu Bar App Refinements
 - **Tactile Cursor Feedback:** Hovering over any VTuber channel row now presents the pointing hand cursor (`NSCursor.pointingHand`) for clear interactive feedback.
 - **Long Handle Tooltips:** Handles that exceed compact row bounds now reveal their complete `@handle` string in a native macOS tooltip on hover.
+- **macOS Golden Gate (macOS 27) Ready:** On macOS 27 (Golden Gate), the menu bar app seamlessly respects the user's system liquid glass preferences and vibrancy styling.
 
 #### 🛠️ Stubborn Zero-Xcode Engineering
 - Built 100% with pure Swift, SwiftUI, AppKit, and WidgetKit using **only Xcode Command Line Tools** (`/Library/Developer/CommandLineTools`).
