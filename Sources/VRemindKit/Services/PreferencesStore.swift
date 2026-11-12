@@ -16,6 +16,8 @@ public final class PreferencesStore: ObservableObject {
         self.userDefaults = userDefaults
         if let data = userDefaults.data(forKey: Self.userDefaultsKey),
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            // AppSettings decodes backward-compatibly, defaulting updateConsent to .undecided
+            // and nullable fields to nil if omitted in older stored settings.
             self.settings = decoded
         } else {
             let defaults = AppSettings()

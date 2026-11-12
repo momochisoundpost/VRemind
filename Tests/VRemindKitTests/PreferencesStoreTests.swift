@@ -44,4 +44,58 @@ struct PreferencesStoreTests {
         let store2 = PreferencesStore(userDefaults: defaults)
         #expect(store2.settings == AppSettings())
     }
+
+    @Test("Update consent defaults to undecided and round-trips via PreferencesStore")
+    @MainActor
+    func testUpdateConsentSettingsPersistence() async {
+        let defaults = UserDefaults(suiteName: "test.preferences.updates.\(UUID().uuidString)")!
+        let store = PreferencesStore(userDefaults: defaults)
+
+        #expect(store.settings.updateConsent == .undecided)
+        #expect(store.settings.lastUpdateCheckDate == nil)
+        #expect(store.settings.ignoredUpdateTag == nil)
+
+        store.settings.updateConsent = .allowed
+        store.settings.ignoredUpdateTag = "v1.0.0"
+        let now = Date()
+        store.settings.lastUpdateCheckDate = now
+
+        let reloadedStore = PreferencesStore(userDefaults: defaults)
+        #expect(reloadedStore.settings.updateConsent == .allowed)
+        #expect(reloadedStore.settings.ignoredUpdateTag == "v1.0.0")
+        #expect(reloadedStore.settings.lastUpdateCheckDate != nil)
+
+        // Verify .neverAsk state also persists cleanly
+        reloadedStore.settings.updateConsent = .neverAsk
+        let thirdStore = PreferencesStore(userDefaults: defaults)
+        #expect(thirdStore.settings.updateConsent == .neverAsk)
+    }
+
+    @Test("Loads legacy preferences without update consent gracefully")
+    @MainActor
+    func testLegacyPreferencesDecodeGracefully() async {
+        let suiteName = "test.preferences.legacy.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        // Legacy JSON format with only original 5 fields
+        let legacyJSON = """
+        {
+            "launchAtLogin": true,
+            "notifyOnLive": false,
+            "notifyOnUpcoming": true,
+            "playNotificationSound": false,
+            "hasCompletedOnboarding": true
+        }
+        """.data(using: .utf8)!
+        defaults.set(legacyJSON, forKey: PreferencesStore.userDefaultsKey)
+
+        let store = PreferencesStore(userDefaults: defaults)
+        #expect(store.settings.launchAtLogin == true)
+        #expect(store.settings.notifyOnLive == false)
+        #expect(store.settings.notifyOnUpcoming == true)
+        #expect(store.settings.playNotificationSound == false)
+        #expect(store.settings.hasCompletedOnboarding == true)
+        #expect(store.settings.updateConsent == .undecided)
+        #expect(store.settings.lastUpdateCheckDate == nil)
+        #expect(store.settings.ignoredUpdateTag == nil)
+    }
 }
