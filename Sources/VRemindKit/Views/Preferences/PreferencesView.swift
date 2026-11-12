@@ -103,7 +103,7 @@ public struct PreferencesView: View {
                 }
                 .tag(2)
         }
-        .frame(width: 480, height: 320)
+        .frame(width: 480, height: 350)
     }
 
     // MARK: - Tab 1: General
@@ -236,17 +236,10 @@ public struct PreferencesView: View {
     // MARK: - Tab 3: About
 
     private var aboutTab: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.18))
-                    .frame(width: 54, height: 54)
-                Image(systemName: "play.tv")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundColor(Theme.accent)
-            }
+            AppIconView(size: 54)
 
             VStack(spacing: 4) {
                 Text("VRemind")
@@ -262,6 +255,8 @@ public struct PreferencesView: View {
                 .font(.callout)
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.center)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
 
             Text(PreferencesViewModel.forkCopy)
@@ -269,19 +264,45 @@ public struct PreferencesView: View {
                 .foregroundColor(.secondary)
                 .italic()
                 .multilineTextAlignment(.center)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
 
-            HStack(spacing: 12) {
-                Button(action: {
-                    LinkOpener.open(AppConstants.youtubeChannelURL)
-                }) {
-                    Label("YouTube", systemImage: "play.rectangle.fill")
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    Button(action: {
+                        LinkOpener.open(AppConstants.youtubeChannelURL)
+                    }) {
+                        Label("YouTube", systemImage: "play.rectangle.fill")
+                    }
+
+                    Button(action: {
+                        LinkOpener.open(AppConstants.twitterURL)
+                    }) {
+                        Label("Twitter/X", systemImage: "bubble.left.and.bubble.right.fill")
+                    }
                 }
 
-                Button(action: {
-                    LinkOpener.open(AppConstants.twitterURL)
-                }) {
-                    Label("Twitter/X", systemImage: "bubble.left.and.bubble.right.fill")
+                HStack(spacing: 12) {
+                    Button(action: {
+                        LinkOpener.open(AppConstants.githubURL)
+                    }) {
+                        Label {
+                            Text("GitHub")
+                        } icon: {
+                            Image(nsImage: BrandIcon.githubImage)
+                        }
+                    }
+
+                    Button(action: {
+                        LinkOpener.open(AppConstants.instagramURL)
+                    }) {
+                        Label {
+                            Text("Instagram")
+                        } icon: {
+                            Image(nsImage: BrandIcon.instagramImage)
+                        }
+                    }
                 }
             }
             .buttonStyle(.bordered)

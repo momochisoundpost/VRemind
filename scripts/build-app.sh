@@ -33,5 +33,33 @@ fi
 chmod +x "$APP_DIR/Contents/MacOS/VRemind"
 cp Resources/Info.plist "$APP_DIR/Contents/Info.plist"
 
+if [[ -f "Resources/Icons/app-icon.png" ]]; then
+  if [[ ! -f "Resources/AppIcon.icns" || "Resources/Icons/app-icon.png" -nt "Resources/AppIcon.icns" ]]; then
+    echo "Generating Resources/AppIcon.icns..."
+    ICONSET_DIR="$(mktemp -d)/AppIcon.iconset"
+    mkdir -p "$ICONSET_DIR"
+    sips -z 16 16     Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_16x16.png" >/dev/null 2>&1
+    sips -z 32 32     Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null 2>&1
+    sips -z 32 32     Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_32x32.png" >/dev/null 2>&1
+    sips -z 64 64     Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null 2>&1
+    sips -z 128 128   Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_128x128.png" >/dev/null 2>&1
+    sips -z 256 256   Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null 2>&1
+    sips -z 256 256   Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_256x256.png" >/dev/null 2>&1
+    sips -z 512 512   Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null 2>&1
+    sips -z 512 512   Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_512x512.png" >/dev/null 2>&1
+    sips -z 1024 1024 Resources/Icons/app-icon.png --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null 2>&1
+    iconutil -c icns "$ICONSET_DIR" -o Resources/AppIcon.icns
+    rm -rf "$(dirname "$ICONSET_DIR")"
+  fi
+fi
+
+if [[ -f "Resources/AppIcon.icns" ]]; then
+  cp Resources/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+fi
+
+if [[ -d "Resources/Icons" ]]; then
+  cp -R Resources/Icons "$APP_DIR/Contents/Resources/"
+fi
+
 codesign --force --deep --sign - "$APP_DIR"
 echo "Built $APP_DIR"

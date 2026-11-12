@@ -80,14 +80,7 @@ public struct OnboardingView: View {
         VStack(spacing: 20) {
             // Header
             VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.accent.opacity(0.18))
-                        .frame(width: 56, height: 56)
-                    Image(systemName: "play.tv")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundColor(Theme.accent)
-                }
+                AppIconView(size: 56)
 
                 Text("Welcome to VRemind")
                     .font(.title)

@@ -8,6 +8,8 @@
     <string>VRemind</string>
     <key>CFBundleExecutable</key>
     <string>VRemind</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.caitlyn.vremind</string>
     <key>CFBundleInfoDictionaryVersion</key>

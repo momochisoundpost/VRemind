@@ -67,6 +67,24 @@ struct PreferencesViewTests {
     @Test func testAppConstantsURLs() {
         #expect(AppConstants.youtubeChannelURL == URL(string: "https://www.youtube.com/@bukancaitlyn")!)
         #expect(AppConstants.twitterURL == URL(string: "https://twitter.com/Y2Karyl")!)
+        #expect(AppConstants.githubURL == URL(string: "https://github.com/momochisoundpost")!)
+        #expect(AppConstants.instagramURL == URL(string: "https://www.instagram.com/bukancaitlyn")!)
+    }
+
+    @Test func testBrandIconsLoadCorrectly() {
+        let gh = BrandIcon.githubImage
+        #expect(gh.size.width > 0)
+        #expect(gh.size.height > 0)
+        #expect(gh.isTemplate == true)
+
+        let ig = BrandIcon.instagramImage
+        #expect(ig.size.width > 0)
+        #expect(ig.size.height > 0)
+        #expect(ig.isTemplate == true)
+
+        let appIcon = BrandIcon.appIconImage
+        #expect(appIcon != nil)
+        #expect(appIcon?.size.width ?? 0 > 0)
     }
 
     @Test @MainActor func testPreferencesViewModelNotificationInteractions() async {
