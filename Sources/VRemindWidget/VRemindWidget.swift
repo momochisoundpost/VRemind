@@ -19,7 +19,7 @@ public struct VRemindWidgetEntryView: View {
             SmallHeroWidgetView(entry: entry)
         case .systemMedium:
             MediumWatchlistWidgetView(entry: entry)
-        case .systemLarge:
+        case .systemLarge, .systemExtraLarge:
             LargeDashboardWidgetView(entry: entry)
         @unknown default:
             SmallHeroWidgetView(entry: entry)

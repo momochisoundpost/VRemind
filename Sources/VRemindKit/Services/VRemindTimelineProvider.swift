@@ -33,8 +33,9 @@ public struct VRemindTimelineProvider {
     #if canImport(WidgetKit)
     /// Builds timeline with next refresh interval policy (15 minutes).
     public func timelineEntries() -> Timeline<VRemindWidgetEntry> {
+        let now = Date()
         let entry = snapshotEntry(isPreview: false)
-        let refreshDate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
+        let refreshDate = Calendar.current.date(byAdding: .minute, value: 15, to: now) ?? now.addingTimeInterval(900)
         return Timeline(entries: [entry], policy: .after(refreshDate))
     }
     #endif

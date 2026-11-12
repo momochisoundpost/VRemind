@@ -216,7 +216,7 @@ public struct SmallHeroWidgetView: View {
         VStack(alignment: .leading, spacing: 2) {
             if let channel = channel {
                 if allOffline {
-                    Text("All channels offline")
+                    Text(offlineHeadline)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
                         .lineLimit(1)
