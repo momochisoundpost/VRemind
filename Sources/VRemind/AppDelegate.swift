@@ -59,6 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitorService?.stopPolling()
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if let streamURL = LinkOpener.shared.parseStreamDeepLink(url) {
+                LinkOpener.shared.open(streamURL)
+            }
+        }
+    }
+
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
