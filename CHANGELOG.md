@@ -12,7 +12,7 @@ What started as a vibecoded menu bar app meant for B-roll footage in a Hackintos
 #### 🎨 Native macOS Desktop Widgets (WidgetKit)
 - **Small Hero Widget (`systemSmall`):**
   - **Edge-to-Edge Avatar Backdrop:** The creator's profile picture fills the entire widget edge-to-edge with a clean fill-crop and dark gradient scrim.
-  - **Adaptive Monochrome Desktop Contrast:** On macOS Sonoma & Sequoia, desktop widgets shift to a monochrome tint when application windows are focused. VRemind dynamically adapts via `@Environment(\.widgetRenderingMode)`—switching typography and status badges to solid high-contrast black so stream titles and live status remain glanceable at all times.
+  - **Adaptive Desktop Contrast & Liquid Glass Respect:** On macOS 27 (Golden Gate), desktop widgets shift to an ambient monochrome or tinted state when application windows are focused. VRemind dynamically adapts via `@Environment(\.widgetRenderingMode)`—switching typography and status badges to solid high-contrast black so stream titles and live status remain glanceable at all times while fully respecting the user's system liquid glass preferences.
 - **Medium Watchlist Widget (`systemMedium`):** Quick-grid status view with side-by-side stream titles and countdown timers.
 - **Large Dashboard Widget (`systemLarge`):** Prominent featured live hero card alongside a full multi-channel watchlist overview.
 - **One-Click Deep Linking (`vremind://open-stream`):** Tapping any widget instantly launches the live broadcast in your default browser.
@@ -24,7 +24,7 @@ What started as a vibecoded menu bar app meant for B-roll footage in a Hackintos
 #### 🛠️ Stubborn Zero-Xcode Engineering
 - Built 100% with pure Swift, SwiftUI, AppKit, and WidgetKit using **only Xcode Command Line Tools** (`/Library/Developer/CommandLineTools`).
 - Reverse-engineered the Apple App Extension Mach-O entry point (`_NSExtensionMain`) and PlugInKit registration to bypass the 40+ GB Xcode IDE requirement.
-- Universal Mach-O binary supporting both Apple Silicon (`arm64`) and Intel (`x86_64`).
+- Universal Mach-O binary supporting both Apple Silicon (`arm64`) and Intel (`x86_64`), running seamlessly from macOS 12 Monterey up to macOS 27 Golden Gate.
 
 ---
 
