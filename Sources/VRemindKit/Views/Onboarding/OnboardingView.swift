@@ -6,6 +6,8 @@ public final class OnboardingViewModel: ObservableObject {
     @Published public var customHandle: String = "@bukancaitlyn"
     @Published public private(set) var validationError: String? = nil
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published public var enableUpdateChecks: Bool = true
+    @Published public var neverAskUpdatesAgain: Bool = false
 
     private let channelStore: ChannelStore
     private let preferencesStore: PreferencesStore
@@ -55,6 +57,14 @@ public final class OnboardingViewModel: ObservableObject {
                     channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil)
                 }
             }
+        }
+
+        if enableUpdateChecks {
+            preferencesStore.settings.updateConsent = .allowed
+        } else if neverAskUpdatesAgain {
+            preferencesStore.settings.updateConsent = .neverAsk
+        } else {
+            preferencesStore.settings.updateConsent = .undecided
         }
 
         preferencesStore.settings.hasCompletedOnboarding = true
@@ -157,6 +167,20 @@ public struct OnboardingView: View {
                 }
             }
 
+            // Updates
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Updates").font(.headline)
+                Toggle("Check for updates automatically", isOn: $viewModel.enableUpdateChecks)
+                    .toggleStyle(.checkbox)
+                if !viewModel.enableUpdateChecks {
+                    Toggle("Never ask again", isOn: $viewModel.neverAskUpdatesAgain)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Spacer(minLength: 8)
 
             // Get Started Button
@@ -173,6 +197,6 @@ public struct OnboardingView: View {
             .keyboardShortcut(.defaultAction)
         }
         .padding(24)
-        .frame(width: 440, height: 380)
+        .frame(width: 440, height: 440)
     }
 }

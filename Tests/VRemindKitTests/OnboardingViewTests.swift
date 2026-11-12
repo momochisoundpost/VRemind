@@ -133,4 +133,46 @@ struct OnboardingViewTests {
         // Ensure body property can be accessed without crashing
         _ = view.body
     }
+
+    @Test("Onboarding completion sets updateConsent to allowed when enabled")
+    @MainActor
+    func testOnboardingUpdateConsentEnabled() {
+        let prefs = PreferencesStore(userDefaults: UserDefaults(suiteName: "test.onboarding.consent.on.\(UUID().uuidString)")!)
+        let channels = ChannelStore(userDefaults: UserDefaults(suiteName: "test.onboarding.channels.on.\(UUID().uuidString)")!)
+        let vm = OnboardingViewModel(channelStore: channels, preferencesStore: prefs)
+
+        #expect(vm.enableUpdateChecks == true)
+        #expect(vm.neverAskUpdatesAgain == false)
+        _ = vm.completeOnboarding()
+
+        #expect(prefs.settings.updateConsent == .allowed)
+    }
+
+    @Test("Onboarding completion sets updateConsent to neverAsk when disabled and neverAsk checked")
+    @MainActor
+    func testOnboardingUpdateConsentNeverAsk() {
+        let prefs = PreferencesStore(userDefaults: UserDefaults(suiteName: "test.onboarding.consent.never.\(UUID().uuidString)")!)
+        let channels = ChannelStore(userDefaults: UserDefaults(suiteName: "test.onboarding.channels.never.\(UUID().uuidString)")!)
+        let vm = OnboardingViewModel(channelStore: channels, preferencesStore: prefs)
+
+        vm.enableUpdateChecks = false
+        vm.neverAskUpdatesAgain = true
+        _ = vm.completeOnboarding()
+
+        #expect(prefs.settings.updateConsent == .neverAsk)
+    }
+
+    @Test("Onboarding completion leaves updateConsent undecided when disabled but neverAsk unchecked")
+    @MainActor
+    func testOnboardingUpdateConsentUndecidedWhenUnchecked() {
+        let prefs = PreferencesStore(userDefaults: UserDefaults(suiteName: "test.onboarding.consent.undecided.\(UUID().uuidString)")!)
+        let channels = ChannelStore(userDefaults: UserDefaults(suiteName: "test.onboarding.channels.undecided.\(UUID().uuidString)")!)
+        let vm = OnboardingViewModel(channelStore: channels, preferencesStore: prefs)
+
+        vm.enableUpdateChecks = false
+        vm.neverAskUpdatesAgain = false
+        _ = vm.completeOnboarding()
+
+        #expect(prefs.settings.updateConsent == .undecided)
+    }
 }

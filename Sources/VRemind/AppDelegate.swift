@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var preferencesStore: PreferencesStore!
     var notificationService: NotificationService!
     var monitorService: StreamMonitorService!
+    var updateService: UpdateService!
 
     private var cancellables = Set<AnyCancellable>()
     private var flashTimer: Timer?
@@ -30,11 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferencesStore: preferencesStore,
             notificationService: notificationService
         )
+        let updateService = UpdateService(preferencesStore: preferencesStore)
 
         self.channelStore = channelStore
         self.preferencesStore = preferencesStore
         self.notificationService = notificationService
         self.monitorService = monitorService
+        self.updateService = updateService
 
         setupStatusItem()
         setupPopover()
@@ -109,16 +112,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showOnboardingIfNeeded() {
-        OnboardingWindowController.showIfNeeded(
-            channelStore: channelStore,
-            preferencesStore: preferencesStore,
-            notificationService: notificationService,
-            onComplete: { [weak self] in
-                Task { [weak self] in
-                    await self?.monitorService.refreshAll()
+        if !preferencesStore.settings.hasCompletedOnboarding {
+            OnboardingWindowController.showIfNeeded(
+                channelStore: channelStore,
+                preferencesStore: preferencesStore,
+                notificationService: notificationService,
+                onComplete: { [weak self] in
+                    Task { [weak self] in
+                        await self?.monitorService.refreshAll()
+                        self?.checkUpdateConsentAndLaunchCheck()
+                    }
+                }
+            )
+        } else {
+            checkUpdateConsentAndLaunchCheck()
+        }
+    }
+
+    func checkUpdateConsentAndLaunchCheck() {
+        switch preferencesStore.settings.updateConsent {
+        case .undecided:
+            let alert = NSAlert()
+            alert.messageText = "Enable Automatic Update Checks?"
+            alert.informativeText = "VRemind can check GitHub Releases to notify you when new features and improvements are available. No personal data is transmitted."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Enable")
+            alert.addButton(withTitle: "Not Now")
+
+            let checkbox = NSButton(checkboxWithTitle: "Never ask again", target: nil, action: nil)
+            checkbox.sizeToFit()
+            alert.accessoryView = checkbox
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                preferencesStore.settings.updateConsent = .allowed
+                performLaunchUpdateCheck()
+            } else {
+                if checkbox.state == .on {
+                    preferencesStore.settings.updateConsent = .neverAsk
                 }
             }
-        )
+        case .allowed:
+            performLaunchUpdateCheck()
+        case .neverAsk:
+            break
+        }
+    }
+
+    private func performLaunchUpdateCheck() {
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.updateService.checkForUpdates(manual: false)
+            if case .updateAvailable(let release) = result {
+                UpdateAvailableWindowController.show(release: release, preferencesStore: self.preferencesStore)
+            }
+        }
     }
 
     private func quitApp() {
