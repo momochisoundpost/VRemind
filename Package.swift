@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "VRemindKit", targets: ["VRemindKit"]),
         .executable(name: "VRemind", targets: ["VRemind"]),
+        .executable(name: "VRemindWidget", targets: ["VRemindWidget"]),
     ],
     targets: [
         .target(
@@ -19,7 +20,10 @@ let package = Package(
         .executableTarget(
             name: "VRemindWidget",
             dependencies: ["VRemindKit"],
-            path: "Sources/VRemindWidget"
+            path: "Sources/VRemindWidget",
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])
+            ]
         ),
         .testTarget(
             name: "VRemindKitTests",
