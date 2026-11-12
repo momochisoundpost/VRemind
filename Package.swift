@@ -16,6 +16,11 @@ let package = Package(
             name: "VRemind",
             dependencies: ["VRemindKit"]
         ),
+        .executableTarget(
+            name: "VRemindWidget",
+            dependencies: ["VRemindKit"],
+            path: "Sources/VRemindWidget"
+        ),
         .testTarget(
             name: "VRemindKitTests",
             dependencies: ["VRemindKit"]
