@@ -129,6 +129,69 @@ final class ValueBox<T>: @unchecked Sendable {
     }
 }
 
+final class SpyWidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked Sendable {
+    struct WriteRecord: Sendable {
+        let channels: [WatchedChannel]
+        let statuses: [String: StreamStatus]
+    }
+
+    private let lock = NSLock()
+    private var _writes: [WriteRecord] = []
+    private var _shouldThrow: Error?
+
+    var shouldThrow: Error? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _shouldThrow
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _shouldThrow = newValue
+        }
+    }
+
+    var writeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _writes.count
+    }
+
+    var writes: [WriteRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _writes
+    }
+
+    var lastWrite: WriteRecord? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _writes.last
+    }
+
+    init(shouldThrow: Error? = nil) {
+        self._shouldThrow = shouldThrow
+    }
+
+    private func recordWrite(channels: [WatchedChannel], statuses: [String: StreamStatus]) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if let err = _shouldThrow {
+            throw err
+        }
+        _writes.append(WriteRecord(channels: channels, statuses: statuses))
+    }
+
+    func writeSnapshot(channels: [WatchedChannel], statuses: [String: StreamStatus]) async throws {
+        try recordWrite(channels: channels, statuses: statuses)
+    }
+
+    func readSnapshot() -> WidgetSnapshot? {
+        nil
+    }
+}
+
 struct StreamMonitorServiceTests {
     @Test @MainActor func testLiveDeduplicationDoesNotNotifyTwice() async {
         let channelStore = ChannelStore(userDefaults: makeTestDefaults())
@@ -459,7 +522,8 @@ struct StreamMonitorServiceTests {
                 fetchCount.set(fetchCount.get() + 1)
                 return (makeOfflineHTML(), make200Response())
             },
-            notificationCenter: spyCenter
+            notificationCenter: spyCenter,
+            snapshotStore: SpyWidgetSnapshotStore()
         )
 
         service?.startPolling(interval: 0.05)
@@ -625,5 +689,141 @@ struct StreamMonitorServiceTests {
 
         let channel = channelStore.channels.first { $0.id == "@upcoming_vtuber" }
         #expect(channel?.avatarURL?.absoluteString == "https://yt3.ggpht.com/upcoming_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj")
+    }
+
+    @Test @MainActor func testPollingPassUpdatesWidgetSnapshot() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+        let spySnapshotStore = SpyWidgetSnapshotStore()
+
+        let currentStatus = ValueBox("live")
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { _ in
+                if currentStatus.get() == "live" {
+                    return (makeLiveHTML(videoId: "vid_123", channelTitle: "Caitlyn", streamTitle: "Singing"), make200Response())
+                } else {
+                    return (makeOfflineHTML(channelTitle: "Caitlyn"), make200Response())
+                }
+            },
+            snapshotStore: spySnapshotStore
+        )
+
+        // Initial refresh pass (live)
+        await service.refreshAll()
+
+        #expect(spySnapshotStore.writeCount == 1)
+        if let lastWrite = spySnapshotStore.lastWrite {
+            #expect(lastWrite.channels.contains { $0.id == "@bukancaitlyn" })
+            if case .live(let vid, let title, _) = lastWrite.statuses["@bukancaitlyn"] {
+                #expect(vid == "vid_123")
+                #expect(title == "Singing")
+            } else {
+                Issue.record("Expected .live stream status in snapshot")
+            }
+        }
+
+        // Status transition to offline
+        currentStatus.set("offline")
+        await service.refreshAll()
+
+        #expect(spySnapshotStore.writeCount == 2)
+        if let secondWrite = spySnapshotStore.lastWrite {
+            if case .offline = secondWrite.statuses["@bukancaitlyn"] {
+                // Expected offline status
+            } else {
+                Issue.record("Expected .offline stream status in snapshot after transition")
+            }
+        }
+    }
+
+    @Test @MainActor func testPollingPassUpdatesWidgetSnapshotWithExtractedMetadata() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+        let spySnapshotStore = SpyWidgetSnapshotStore()
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { _ in
+                (
+                    makeLiveHTML(
+                        videoId: "live_avatar_id",
+                        channelTitle: "Updated Caitlyn Name",
+                        streamTitle: "Stream Title",
+                        avatarURL: "https://yt3.googleusercontent.com/avatar123=s800"
+                    ),
+                    make200Response()
+                )
+            },
+            snapshotStore: spySnapshotStore
+        )
+
+        await service.refreshAll()
+
+        #expect(spySnapshotStore.writeCount == 1)
+        if let lastWrite = spySnapshotStore.lastWrite {
+            let channel = lastWrite.channels.first { $0.id == "@bukancaitlyn" }
+            #expect(channel?.name == "Updated Caitlyn Name")
+            #expect(channel?.avatarURL?.absoluteString == "https://yt3.googleusercontent.com/avatar123=s800")
+        }
+    }
+
+    @Test @MainActor func testSnapshotStoreErrorDoesNotCrashOrInterruptPolling() async {
+        enum TestError: Error {
+            case simulatedDiskError
+        }
+
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+        let failingSnapshotStore = SpyWidgetSnapshotStore(shouldThrow: TestError.simulatedDiskError)
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            fetcher: { _ in (makeLiveHTML(videoId: "vid_survive"), make200Response()) },
+            snapshotStore: failingSnapshotStore
+        )
+
+        // Refresh must not throw or crash despite snapshot store throwing
+        await service.refreshAll()
+
+        let channel = channelStore.channels[0]
+        if case .live(let videoId, _, _) = service.status(for: channel) {
+            #expect(videoId == "vid_survive")
+        } else {
+            Issue.record("Expected stream status to be updated to live despite snapshot store failure")
+        }
+    }
+
+    @Test @MainActor func testEmptyWatchlistExportsEmptySnapshot() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        channelStore.removeChannel(id: "@bukancaitlyn")
+        #expect(channelStore.channels.isEmpty)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockNotifier = MockNotificationService()
+        let spySnapshotStore = SpyWidgetSnapshotStore()
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            snapshotStore: spySnapshotStore
+        )
+
+        await service.refreshAll()
+
+        #expect(spySnapshotStore.writeCount == 1)
+        if let lastWrite = spySnapshotStore.lastWrite {
+            #expect(lastWrite.channels.isEmpty)
+        }
     }
 }

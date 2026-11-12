@@ -31,6 +31,7 @@ public final class StreamMonitorService: ObservableObject {
     public let preferencesStore: PreferencesStore
     public let notificationService: NotificationService
     public let fetcher: Fetcher
+    public let snapshotStore: WidgetSnapshotStoreProtocol
 
     public private(set) var isPolling: Bool = false
     public private(set) var isPausedForSleep: Bool = false
@@ -47,13 +48,15 @@ public final class StreamMonitorService: ObservableObject {
         preferencesStore: PreferencesStore,
         notificationService: NotificationService,
         fetcher: @escaping Fetcher = StreamMonitorService.defaultFetcher,
-        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
+        notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        snapshotStore: WidgetSnapshotStoreProtocol = WidgetSnapshotStore.shared
     ) {
         self.channelStore = channelStore
         self.preferencesStore = preferencesStore
         self.notificationService = notificationService
         self.fetcher = fetcher
         self.notificationCenter = notificationCenter
+        self.snapshotStore = snapshotStore
     }
 
     public var isAnyLive: Bool {
@@ -67,6 +70,17 @@ public final class StreamMonitorService: ObservableObject {
 
     public func status(for channel: WatchedChannel) -> StreamStatus {
         statuses[channel.id] ?? .unknown
+    }
+
+    public func exportWidgetSnapshot() async {
+        do {
+            try await snapshotStore.writeSnapshot(
+                channels: channelStore.channels,
+                statuses: statuses
+            )
+        } catch {
+            NSLog("Failed to export widget snapshot: %@", error.localizedDescription)
+        }
     }
 
     public func refreshAll() async {
@@ -85,7 +99,10 @@ public final class StreamMonitorService: ObservableObject {
 
     private func performRefreshPass() async {
         let channels = channelStore.channels
-        guard !channels.isEmpty else { return }
+        guard !channels.isEmpty else {
+            await exportWidgetSnapshot()
+            return
+        }
 
         let batchSize = 3
         let fetch = self.fetcher
@@ -143,6 +160,8 @@ public final class StreamMonitorService: ObservableObject {
                 await apply(outcome: outcome)
             }
         }
+
+        await exportWidgetSnapshot()
     }
 
     private func apply(outcome: (channel: WatchedChannel, result: Result<(LivePageResult, String?, URL?), Error>)) async {
