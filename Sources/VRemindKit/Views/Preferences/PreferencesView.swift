@@ -10,21 +10,41 @@ public final class PreferencesViewModel: ObservableObject {
     public let preferencesStore: PreferencesStore
     public let channelStore: ChannelStore
     public let notificationService: NotificationService?
+    public let updateService: UpdateService?
+    public let onUpdateAvailable: ((GitHubRelease) -> Void)?
+
     @Published public var isShowingResetConfirmation: Bool = false
+    @Published public var isShowingEasterEggAlert: Bool = false
+    @Published public var updateStatusText: String? = nil
+    @Published public var isCheckingUpdates: Bool = false
+    @Published public var latestAvailableRelease: GitHubRelease? = nil
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus
 
     private let onFactoryReset: (() -> Void)?
 
+    public var isAutoUpdateEnabled: Bool {
+        get {
+            preferencesStore.settings.updateConsent == .allowed
+        }
+        set {
+            setAutoUpdateEnabled(newValue)
+        }
+    }
+
     public init(
         preferencesStore: PreferencesStore,
         channelStore: ChannelStore,
-        notificationService: NotificationService?,
-        onFactoryReset: (() -> Void)? = nil
+        notificationService: NotificationService? = nil,
+        updateService: UpdateService? = nil,
+        onFactoryReset: (() -> Void)? = nil,
+        onUpdateAvailable: ((GitHubRelease) -> Void)? = nil
     ) {
         self.preferencesStore = preferencesStore
         self.channelStore = channelStore
         self.notificationService = notificationService
+        self.updateService = updateService
         self.onFactoryReset = onFactoryReset
+        self.onUpdateAvailable = onUpdateAvailable
         self.authorizationStatus = notificationService?.authorizationStatus ?? .notDetermined
     }
 
@@ -37,8 +57,14 @@ public final class PreferencesViewModel: ObservableObject {
             preferencesStore: preferencesStore,
             channelStore: channelStore,
             notificationService: NotificationService(),
-            onFactoryReset: onFactoryReset
+            updateService: nil,
+            onFactoryReset: onFactoryReset,
+            onUpdateAvailable: nil
         )
+    }
+
+    public func setAutoUpdateEnabled(_ enabled: Bool) {
+        preferencesStore.settings.updateConsent = enabled ? .allowed : .neverAsk
     }
 
     public func setLaunchAtLogin(_ enabled: Bool) {
@@ -72,6 +98,43 @@ public final class PreferencesViewModel: ObservableObject {
             LinkOpener.open(url)
         }
     }
+
+    @discardableResult
+    public func checkForUpdatesManually() async -> UpdateCheckResult? {
+        guard let updateService else {
+            updateStatusText = "Update service unavailable"
+            return nil
+        }
+
+        isCheckingUpdates = true
+        updateStatusText = "Checking for updates..."
+        defer { isCheckingUpdates = false }
+
+        let result = await updateService.checkForUpdates(manual: true)
+        switch result {
+        case .updateAvailable(let release):
+            latestAvailableRelease = release
+            updateStatusText = "Version \(release.tagName) is available."
+            onUpdateAvailable?(release)
+        case .upToDate(let latestVersion):
+            latestAvailableRelease = nil
+            updateStatusText = "VRemind is up to date (\(latestVersion))."
+        case .localVersionNewer(let remoteVersion):
+            latestAvailableRelease = nil
+            isShowingEasterEggAlert = true
+            updateStatusText = "Local version is newer than GitHub (\(remoteVersion))."
+        case .skippedIgnored(let version):
+            latestAvailableRelease = nil
+            updateStatusText = "Version \(version) is available (ignored)."
+        case .skippedNotConsented:
+            latestAvailableRelease = nil
+            updateStatusText = "Automatic updates are disabled."
+        case .failed(let message):
+            latestAvailableRelease = nil
+            updateStatusText = "Update check failed: \(message)"
+        }
+        return result
+    }
 }
 
 public struct PreferencesView: View {
@@ -103,7 +166,7 @@ public struct PreferencesView: View {
                 }
                 .tag(2)
         }
-        .frame(width: 480, height: 350)
+        .frame(width: 480, height: 400)
     }
 
     // MARK: - Tab 1: General
@@ -127,6 +190,56 @@ public struct PreferencesView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("Updates")
+                    .font(.headline)
+
+                Text("Current Version: \(AppConstants.appVersion)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Toggle(
+                    "Automatically check for updates",
+                    isOn: Binding(
+                        get: { viewModel.isAutoUpdateEnabled },
+                        set: { viewModel.setAutoUpdateEnabled($0) }
+                    )
+                )
+                .toggleStyle(.checkbox)
+
+                HStack(spacing: 12) {
+                    Button("Check for Updates Now") {
+                        Task {
+                            await viewModel.checkForUpdatesManually()
+                        }
+                    }
+                    .disabled(viewModel.isCheckingUpdates)
+
+                    if viewModel.isCheckingUpdates {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    if let statusText = viewModel.updateStatusText {
+                        Text(statusText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .alert(isPresented: $viewModel.isShowingEasterEggAlert) {
+                Alert(
+                    title: Text("Did you steal Caitlyn's computer?"),
+                    message: Text("Your version (\(AppConstants.appVersion)) is newer than what's available on GitHub."),
+                    primaryButton: .default(Text("Yes")) {
+                        LinkOpener.open(AppConstants.policeSirenURL)
+                    },
+                    secondaryButton: .cancel(Text("No"))
+                )
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Danger Zone")
                     .font(.headline)
                     .foregroundColor(.red)
@@ -140,20 +253,20 @@ public struct PreferencesView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            .alert(isPresented: $viewModel.isShowingResetConfirmation) {
+                Alert(
+                    title: Text("Reset All Data?"),
+                    message: Text("This will restore default settings, reset your watchlist back to @bukancaitlyn, and disable launch at login. This action cannot be undone."),
+                    primaryButton: .destructive(Text("Reset")) {
+                        viewModel.performFactoryReset()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
 
             Spacer()
         }
         .padding(20)
-        .alert(isPresented: $viewModel.isShowingResetConfirmation) {
-            Alert(
-                title: Text("Reset All Data?"),
-                message: Text("This will restore default settings, reset your watchlist back to @bukancaitlyn, and disable launch at login. This action cannot be undone."),
-                primaryButton: .destructive(Text("Reset")) {
-                    viewModel.performFactoryReset()
-                },
-                secondaryButton: .cancel()
-            )
-        }
     }
 
     // MARK: - Tab 2: Notifications
@@ -246,7 +359,7 @@ public struct PreferencesView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text("Version 1.0")
+                Text("Version \(AppConstants.appVersion)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

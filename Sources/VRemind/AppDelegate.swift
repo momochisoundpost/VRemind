@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferencesStore: preferencesStore,
             channelStore: channelStore,
             notificationService: notificationService,
+            updateService: updateService,
             onFactoryReset: { [weak self] in
                 self?.handleFactoryReset()
             }

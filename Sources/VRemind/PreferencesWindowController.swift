@@ -10,6 +10,7 @@ public final class PreferencesWindowController: NSWindowController, NSWindowDele
         preferencesStore: PreferencesStore,
         channelStore: ChannelStore,
         notificationService: NotificationService? = nil,
+        updateService: UpdateService? = nil,
         onFactoryReset: (() -> Void)? = nil
     ) {
         if let existing = currentController {
@@ -19,10 +20,12 @@ public final class PreferencesWindowController: NSWindowController, NSWindowDele
         }
 
         let resolvedService = notificationService ?? NotificationService()
+        let resolvedUpdateService = updateService ?? UpdateService(preferencesStore: preferencesStore)
         let controller = PreferencesWindowController(
             preferencesStore: preferencesStore,
             channelStore: channelStore,
             notificationService: resolvedService,
+            updateService: resolvedUpdateService,
             onFactoryReset: onFactoryReset
         )
         currentController = controller
@@ -45,20 +48,27 @@ public final class PreferencesWindowController: NSWindowController, NSWindowDele
         preferencesStore: PreferencesStore,
         channelStore: ChannelStore,
         notificationService: NotificationService? = nil,
+        updateService: UpdateService? = nil,
         onFactoryReset: (() -> Void)? = nil
     ) {
         let resolvedService = notificationService ?? NotificationService()
+        let resolvedUpdateService = updateService ?? UpdateService(preferencesStore: preferencesStore)
         let viewModel = PreferencesViewModel(
             preferencesStore: preferencesStore,
             channelStore: channelStore,
             notificationService: resolvedService,
-            onFactoryReset: onFactoryReset
+            updateService: resolvedUpdateService,
+            onFactoryReset: onFactoryReset,
+            onUpdateAvailable: { [weak preferencesStore] release in
+                guard let preferencesStore else { return }
+                UpdateAvailableWindowController.show(release: release, preferencesStore: preferencesStore)
+            }
         )
         let rootView = PreferencesView(viewModel: viewModel)
         let hostingController = NSHostingController(rootView: rootView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 350),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
