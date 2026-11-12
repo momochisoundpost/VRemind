@@ -55,39 +55,6 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
         self.release = release
         self.preferencesStore = preferencesStore
 
-        let opener = openURL ?? LinkOpener.open
-
-        var controllerRef: UpdateAvailableWindowController?
-
-        let rootView = UpdateAvailableView(
-            release: release,
-            currentVersion: AppConstants.appVersion,
-            onDownload: {
-                let zipAsset = release.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") })
-                let targetURL = zipAsset?.browserDownloadURL ?? release.htmlURL
-                opener(targetURL)
-                controllerRef?.close()
-                if UpdateAvailableWindowController.currentController === controllerRef {
-                    UpdateAvailableWindowController.currentController = nil
-                }
-            },
-            onSkip: {
-                preferencesStore.settings.ignoredUpdateTag = release.tagName
-                controllerRef?.close()
-                if UpdateAvailableWindowController.currentController === controllerRef {
-                    UpdateAvailableWindowController.currentController = nil
-                }
-            },
-            onLater: {
-                controllerRef?.close()
-                if UpdateAvailableWindowController.currentController === controllerRef {
-                    UpdateAvailableWindowController.currentController = nil
-                }
-            }
-        )
-
-        let hostingController = NSHostingController(rootView: rootView)
-
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
             styleMask: [.titled, .closable],
@@ -97,11 +64,43 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
         window.title = "Software Update Available"
         window.center()
         window.isReleasedWhenClosed = false
-        window.contentViewController = hostingController
 
         super.init(window: window)
-        controllerRef = self
         window.delegate = self
+
+        let opener = openURL ?? LinkOpener.open
+
+        let rootView = UpdateAvailableView(
+            release: release,
+            currentVersion: AppConstants.appVersion,
+            onDownload: { [weak self] in
+                guard let self else { return }
+                let zipAsset = release.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") })
+                let targetURL = zipAsset?.browserDownloadURL ?? release.htmlURL
+                opener(targetURL)
+                self.close()
+                if UpdateAvailableWindowController.currentController === self {
+                    UpdateAvailableWindowController.currentController = nil
+                }
+            },
+            onSkip: { [weak self] in
+                guard let self else { return }
+                preferencesStore.settings.ignoredUpdateTag = release.tagName
+                self.close()
+                if UpdateAvailableWindowController.currentController === self {
+                    UpdateAvailableWindowController.currentController = nil
+                }
+            },
+            onLater: { [weak self] in
+                guard let self else { return }
+                self.close()
+                if UpdateAvailableWindowController.currentController === self {
+                    UpdateAvailableWindowController.currentController = nil
+                }
+            }
+        )
+
+        window.contentViewController = NSHostingController(rootView: rootView)
     }
 
     required init?(coder: NSCoder) {
