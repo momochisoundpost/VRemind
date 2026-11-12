@@ -209,4 +209,91 @@ struct MenuBarViewTests {
         #expect(ElapsedTime.relative(from: past, now: now) == "2h 05m ago")
         #expect(ElapsedTime.relative(from: nil, now: now) == "Offline")
     }
+
+    private static let rawSecretBytes: [UInt8] = [55, 59, 46, 41, 47, 51, 48, 47, 54, 51, 59, 52, 57, 50]
+    private static var secretTargetHandle: String {
+        "@" + String(decoding: rawSecretBytes.map { $0 ^ 0x5a }, as: UTF8.self)
+    }
+
+    @Test func testSecretChannelBottomPriorityDemotion() {
+        let targetHandle = Self.secretTargetHandle
+        let chTarget = WatchedChannel(id: targetHandle, name: "Target", handle: targetHandle)
+        let ch1 = WatchedChannel(id: "@alpha", name: "Alpha", handle: "@alpha")
+        let ch2 = WatchedChannel(id: "@beta", name: "Beta", handle: "@beta")
+
+        // 1. Live section demotion
+        let liveStatus = StreamStatus.live(videoId: "v", title: "T", startedAt: Date())
+        let sectionsLive = MenuBarStatusViewModel.splitSections(
+            channels: [chTarget, ch1, ch2],
+            statuses: [targetHandle: liveStatus, "@alpha": liveStatus, "@beta": liveStatus]
+        )
+        #expect(sectionsLive.live.map(\.id) == ["@alpha", "@beta", targetHandle])
+
+        // 2. Upcoming section demotion
+        let upStatus = StreamStatus.upcoming(videoId: "v2", title: "T2", scheduledStartTime: Date())
+        let sectionsUp = MenuBarStatusViewModel.splitSections(
+            channels: [chTarget, ch1, ch2],
+            statuses: [targetHandle: upStatus, "@alpha": upStatus, "@beta": upStatus]
+        )
+        #expect(sectionsUp.upcoming.map(\.id) == ["@alpha", "@beta", targetHandle])
+
+        // 3. Offline section demotion
+        let offStatus = StreamStatus.offline(lastStreamedAt: nil)
+        let sectionsOff = MenuBarStatusViewModel.splitSections(
+            channels: [chTarget, ch1, ch2],
+            statuses: [targetHandle: offStatus, "@alpha": offStatus, "@beta": offStatus]
+        )
+        #expect(sectionsOff.offline.map(\.id) == ["@alpha", "@beta", targetHandle])
+    }
+
+    @Test @MainActor func testAddSecretChannelAlertActions() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let notifier = NotificationService(center: NoOpNotificationCenter())
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) }
+        )
+        let viewModel = MenuBarStatusViewModel(channelStore: channelStore, monitorService: monitor)
+
+        var presentedTitle: String? = nil
+        var currentAction: SecretAlertAction = .abort
+
+        viewModel.secretAlertPresenter = { title, message, abort, cancel, ignore in
+            presentedTitle = title
+            return currentAction
+        }
+
+        let targetInput = Self.secretTargetHandle
+
+        // 1. Abort action -> not added
+        viewModel.newHandleInput = targetInput
+        currentAction = .abort
+        let abortResult = viewModel.addChannel()
+        #expect(!abortResult)
+        #expect(presentedTitle != nil)
+        #expect(viewModel.validationError == nil)
+        #expect(!channelStore.channels.contains { $0.id == targetInput.lowercased() })
+
+        // 2. Cancel action -> not added
+        presentedTitle = nil
+        viewModel.newHandleInput = targetInput
+        currentAction = .cancel
+        let cancelResult = viewModel.addChannel()
+        #expect(!cancelResult)
+        #expect(presentedTitle != nil)
+        #expect(viewModel.validationError == nil)
+        #expect(!channelStore.channels.contains { $0.id == targetInput.lowercased() })
+
+        // 3. Ignore action -> added!
+        presentedTitle = nil
+        viewModel.newHandleInput = targetInput
+        currentAction = .ignore
+        let ignoreResult = viewModel.addChannel()
+        #expect(ignoreResult)
+        #expect(presentedTitle != nil)
+        #expect(channelStore.channels.contains { $0.id == targetInput.lowercased() })
+    }
 }

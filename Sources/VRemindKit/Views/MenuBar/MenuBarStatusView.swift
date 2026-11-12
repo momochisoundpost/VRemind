@@ -20,12 +20,52 @@ public struct MenuBarSections: Equatable, Sendable {
     }
 }
 
+// MARK: - SecretAlertAction
+
+public enum SecretAlertAction: Sendable {
+    case abort
+    case cancel
+    case ignore
+}
+
 // MARK: - MenuBarStatusViewModel
 
 @MainActor
 public final class MenuBarStatusViewModel: ObservableObject {
+    public typealias SecretAlertPresenter = @MainActor (
+        _ title: String,
+        _ message: String,
+        _ abort: String,
+        _ cancel: String,
+        _ ignore: String
+    ) -> SecretAlertAction
+
     @Published public var newHandleInput: String = ""
     @Published public private(set) var validationError: String? = nil
+
+    public var secretAlertPresenter: SecretAlertPresenter? = nil
+
+    @MainActor
+    public static var defaultAlertPresenter: SecretAlertPresenter = { title, message, abort, cancel, ignore in
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: abort)
+        alert.addButton(withTitle: cancel)
+        alert.addButton(withTitle: ignore)
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            return .abort
+        case .alertSecondButtonReturn:
+            return .cancel
+        case .alertThirdButtonReturn:
+            return .ignore
+        default:
+            return .cancel
+        }
+    }
 
     public let channelStore: ChannelStore
     public let monitorService: StreamMonitorService
@@ -63,7 +103,17 @@ public final class MenuBarStatusViewModel: ObservableObject {
             }
         }
 
-        return MenuBarSections(live: live, upcoming: upcoming, offline: offline)
+        func demoteSecret(_ list: [WatchedChannel]) -> [WatchedChannel] {
+            let regular = list.filter { !SecretCheck.isTarget($0.handle) && !SecretCheck.isTarget($0.id) }
+            let demoted = list.filter { SecretCheck.isTarget($0.handle) || SecretCheck.isTarget($0.id) }
+            return regular + demoted
+        }
+
+        return MenuBarSections(
+            live: demoteSecret(live),
+            upcoming: demoteSecret(upcoming),
+            offline: demoteSecret(offline)
+        )
     }
 
     public var sections: MenuBarSections {
@@ -92,6 +142,16 @@ public final class MenuBarStatusViewModel: ObservableObject {
         if channelStore.channels.contains(where: { $0.id.lowercased() == targetId }) {
             validationError = "Channel is already in your watchlist"
             return false
+        }
+
+        if SecretCheck.isTarget(normalized) {
+            let strings = SecretCheck.dialogStrings()
+            let presenter = secretAlertPresenter ?? Self.defaultAlertPresenter
+            let action = presenter(strings.title, strings.message, strings.abort, strings.cancel, strings.ignore)
+            if action != .ignore {
+                validationError = nil
+                return false
+            }
         }
 
         guard channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil) != nil else {
