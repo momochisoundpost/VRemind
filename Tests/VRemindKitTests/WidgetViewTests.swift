@@ -217,6 +217,29 @@ struct WidgetViewTests {
         #expect(fallback.snapshot.channels.first?.handle == AppConstants.channelHandle)
     }
 
+    // MARK: - Test 8: SmallHeroWidgetView Monochrome Contrast Adaptation (1.1 Polish)
+
+    @Test func smallHeroWidgetViewMonochromeContrastAdaptsToBlack() {
+        let channel = WidgetChannelItem(
+            handle: "@caitlyn",
+            displayName: "Caitlyn Momochi",
+            avatarFilename: nil,
+            statusKind: .live,
+            streamTitle: "Chill Stream"
+        )
+        let view = SmallHeroWidgetView(channel: channel)
+        #expect(view.primaryTextColor(isMonochrome: false) == Color.white)
+        #expect(view.primaryTextColor(isMonochrome: true) == Color.black)
+        #expect(view.secondaryTextColor(isMonochrome: false) == Color.white.opacity(0.9))
+        #expect(view.secondaryTextColor(isMonochrome: true) == Color.black.opacity(0.85))
+    }
+
+    @Test func smallHeroWidgetViewMonogramFallbackMonochromeContrast() {
+        let view = SmallHeroWidgetView(channel: nil, allOffline: true)
+        #expect(view.primaryTextColor(isMonochrome: true) == Color.black)
+        _ = view.body
+    }
+
     private final class MockSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked Sendable {
         var snapshotToReturn: WidgetSnapshot? = WidgetSnapshot(
             generatedAt: Date(),
