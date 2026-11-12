@@ -296,4 +296,14 @@ struct MenuBarViewTests {
         #expect(presentedTitle != nil)
         #expect(channelStore.channels.contains { $0.id == targetInput.lowercased() })
     }
+
+    @Test func testChannelRowFormattedHandleAndTooltip() {
+        let channelWithAt = WatchedChannel(id: "@saya", name: "Saya", handle: "@sayaayaaulya")
+        let row1 = ChannelRowView(channel: channelWithAt, status: .offline(lastStreamedAt: nil), onDelete: {})
+        #expect(row1.formattedHandle == "@sayaayaaulya")
+
+        let channelWithoutAt = WatchedChannel(id: "plain", name: "Plain", handle: "plaintuber")
+        let row2 = ChannelRowView(channel: channelWithoutAt, status: .offline(lastStreamedAt: nil), onDelete: {})
+        #expect(row2.formattedHandle == "@plaintuber")
+    }
 }

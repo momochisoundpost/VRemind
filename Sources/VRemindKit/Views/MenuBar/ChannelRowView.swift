@@ -1,6 +1,40 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Pointing Hand Cursor Modifier
+
+public struct PointingHandCursorModifier: ViewModifier {
+    @State private var isHovering = false
+
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                if hovering != isHovering {
+                    isHovering = hovering
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+            }
+            .onDisappear {
+                if isHovering {
+                    isHovering = false
+                    NSCursor.pop()
+                }
+            }
+    }
+}
+
+extension View {
+    public func pointingHandCursor() -> some View {
+        modifier(PointingHandCursorModifier())
+    }
+}
+
 public struct ChannelRowView: View {
     public let channel: WatchedChannel
     public let status: StreamStatus
@@ -23,6 +57,10 @@ public struct ChannelRowView: View {
         return false
     }
 
+    public var formattedHandle: String {
+        channel.handle.hasPrefix("@") ? channel.handle : "@\(channel.handle)"
+    }
+
     public var streamURL: URL? {
         switch status {
         case .live(let videoId, _, _), .upcoming(let videoId, _, _):
@@ -32,8 +70,7 @@ public struct ChannelRowView: View {
         case .offline, .unknown:
             break
         }
-        let handle = channel.handle.hasPrefix("@") ? channel.handle : "@\(channel.handle)"
-        let encodedHandle = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
+        let encodedHandle = formattedHandle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? formattedHandle
         return URL(string: "https://www.youtube.com/\(encodedHandle)/live")
     }
 
@@ -58,7 +95,9 @@ public struct ChannelRowView: View {
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
+                                .help(formattedHandle)
                         }
+                        .help(formattedHandle)
 
                         statusSubtitleView
                     }
@@ -71,6 +110,7 @@ public struct ChannelRowView: View {
                 }
             }
             .buttonStyle(.plain)
+            .pointingHandCursor()
 
             Button(action: onDelete) {
                 Image(systemName: "trash")
