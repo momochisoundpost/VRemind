@@ -12,6 +12,9 @@ struct SemanticVersionTests {
         let vBeta = SemanticVersion("1.1-beta")
         #expect(vBeta.major == 1 && vBeta.minor == 1 && vBeta.patch == 0)
 
+        let v11 = SemanticVersion("1.1")
+        #expect(v11.major == 1 && v11.minor == 1 && v11.patch == 0)
+
         let v2 = SemanticVersion("v1.2.3")
         #expect(v2.major == 1 && v2.minor == 2 && v2.patch == 3)
 
@@ -33,9 +36,9 @@ struct SemanticVersionTests {
         #expect(!older.isNewerThan(current))
     }
 
-    @Test("AppConstants holds version 1.1-beta and required URLs")
+    @Test("AppConstants holds version 1.1 and required URLs")
     func testAppConstants() {
-        #expect(AppConstants.appVersion == "1.1-beta")
+        #expect(AppConstants.appVersion == "1.1")
         #expect(AppConstants.releaseNotes == "WIDGETS YES WIDGETS")
         #expect(AppConstants.policeSirenURL.absoluteString == "https://www.youtube.com/watch?v=HKieGUH9pzg")
         #expect(AppConstants.githubReleasesLatestURL.absoluteString == "https://api.github.com/repos/momochisoundpost/VRemind/releases/latest")
