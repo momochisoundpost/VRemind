@@ -188,10 +188,23 @@ In `PreferencesView`:
 
 ---
 
-### 4.5 Version Bump to 1.0.1
+### 4.5 Easter Egg: "Did you steal Caitlyn's computer?"
+If the local running version is **strictly newer** than the latest published release on GitHub (e.g. running `1.0.1` locally while GitHub's latest release is `1.0.0`, or a development build):
+- When an update check is run (either via manual check in Preferences or launch):
+- Present a modal alert dialog:
+  - **Title / Message**: `"Did you steal Caitlyn's computer?"`
+  - **Informative text**: `"Your version (\(currentVersion)) is newer than what's released on GitHub (\(remoteVersion))."`
+  - **Buttons**:
+    - `"Yes"`: Opens the police siren video in the default browser (`https://www.youtube.com/watch?v=HKieGUH9pzg`) via `LinkOpener.open(...)`.
+    - `"No"`: Dismisses the dialog peacefully and reports you are on an unreleased/developer build.
+- URL constant placed in `AppConstants.policeSirenURL = URL(string: "https://www.youtube.com/watch?v=HKieGUH9pzg")!`.
+
+---
+
+### 4.6 Version Bump to 1.0.1
 Files to update:
 - `Resources/Info.plist`: `CFBundleShortVersionString` set to `"1.0.1"`.
-- `AppConstants.swift`: Add `public static let appVersion = "1.0.1"`.
+- `AppConstants.swift`: Add `public static let appVersion = "1.0.1"` and `public static let policeSirenURL`.
 - `PreferencesView.swift`: Display dynamic version string from bundle or constant.
 - Documentation / README version references where applicable.
 
@@ -204,18 +217,19 @@ Files to update:
 
 ---
 
-## 6. Automated Test Plan
+## 7. Automated Test Plan
 1. **`SemanticVersionTests`**:
-   - Comparison of `1.0.1` vs `1.0.0` (false), `1.0.1` vs `1.0.2` (true), `1.0.1` vs `v1.0.1` (false), malformed strings fallback.
+   - Comparison of `1.0.1` vs `1.0.0` (remote is older / local is newer), `1.0.1` vs `1.0.2` (remote is newer), `1.0.1` vs `v1.0.1` (equal), malformed strings fallback.
 2. **`UpdateServiceTests`**:
    - Decoding GitHub Releases API JSON payload.
-   - Successful update detection returns `GitHubRelease`.
-   - Equal or older version returns `.upToDate`.
+   - Successful update detection returns `.updateAvailable(GitHubRelease)`.
+   - Equal version returns `.upToDate`.
+   - Newer local version returns `.localVersionNewer(remoteVersion: String)` (triggering Easter egg).
    - Network failure or rate limit returns error without throwing fatal exceptions.
 3. **`PreferencesStoreTests`**:
    - Persistence of `UpdateConsentState` (`.undecided`, `.allowed`, `.neverAsk`).
 4. **`OnboardingViewModelTests`**:
-   - Update consent toggle correctly updates preferences store.
+   - Update consent toggle and "never ask again" option correctly update preferences store.
 5. **`PreferencesViewModelTests`**:
    - Toggling automatic updates updates `updateConsent`.
-   - Manual check triggers update service and updates status.
+   - Manual check triggers update service and handles `.updateAvailable`, `.upToDate`, and `.localVersionNewer` (Easter egg).
