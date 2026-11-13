@@ -25,9 +25,6 @@ public struct AddChannelBarView: View {
                             .frame(width: 8, height: 8)
                         Text(viewModel.selectedPlatform.displayName)
                             .font(.system(size: 12))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
