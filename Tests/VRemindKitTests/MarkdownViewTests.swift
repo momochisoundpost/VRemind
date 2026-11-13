@@ -181,4 +181,55 @@ struct MarkdownViewTests {
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.fittingSize.width >= 0)
     }
+
+    @Test @MainActor func testVideoPlayerControllerDefaultsMutedAndTogglesMuteAndPause() {
+        let controller = MarkdownVideoPlayerController(url: URL(string: "https://example.com/demo.mp4")!)
+        #expect(controller.isMuted == true)
+        #expect(controller.player.isMuted == true)
+        #expect(controller.isPaused == false)
+
+        controller.toggleMute()
+        #expect(controller.isMuted == false)
+        #expect(controller.player.isMuted == false)
+
+        controller.toggleMute()
+        #expect(controller.isMuted == true)
+        #expect(controller.player.isMuted == true)
+
+        controller.togglePlayPause()
+        #expect(controller.isPaused == true)
+        #expect(controller.player.rate == 0)
+
+        controller.togglePlayPause()
+        #expect(controller.isPaused == false)
+    }
+
+    @Test @MainActor func testVideoPlayerControllerStartStopAndFailureFallback() {
+        let controller = MarkdownVideoPlayerController(url: URL(string: "https://example.com/demo.mp4")!)
+        controller.start()
+        #expect(controller.player.currentItem != nil)
+        #expect(controller.player.isMuted == true)
+        #expect(controller.hasFailed == false)
+
+        controller.markFailed()
+        #expect(controller.hasFailed == true)
+        #expect(controller.isLoading == false)
+
+        controller.stop()
+        #expect(controller.player.currentItem == nil)
+        #expect(controller.player.rate == 0)
+    }
+
+    @Test @MainActor func testMarkdownVideoPlayerViewAndMarkdownViewWithVideoRenderWithoutCrash() {
+        let videoView = MarkdownVideoPlayerView(
+            url: URL(string: "https://example.com/demo.mp4")!,
+            alt: "Demo clip"
+        )
+        let videoController = NSHostingController(rootView: videoView)
+        #expect(videoController.view.fittingSize.width >= 0)
+
+        let markdownView = MarkdownView(markdown: "<video src=\"https://example.com/demo.mp4\"></video>")
+        let markdownController = NSHostingController(rootView: markdownView)
+        #expect(markdownController.view.fittingSize.width >= 0)
+    }
 }

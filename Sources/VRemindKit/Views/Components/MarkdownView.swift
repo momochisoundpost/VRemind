@@ -555,9 +555,7 @@ public struct MarkdownView: View {
             }
 
         case .video(let url, let alt):
-            Text(alt ?? url.lastPathComponent)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            MarkdownVideoPlayerView(url: url, alt: alt)
         }
     }
 
