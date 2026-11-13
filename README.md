@@ -4,7 +4,7 @@
   <img src="Resources/Icons/app-icon.png" alt="VRemind App Icon" width="96">
 </p>
 
-A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero external dependencies.
+A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero third-party dependencies.
 
 ---
 
@@ -141,7 +141,7 @@ open build/VRemind.app
 ## Frequently Asked Questions (FAQ)
 
 ### Is there a Windows or Linux build?
-**The macOS app is 100% Mac-native — and the engine is now portable.** VRemind itself is built on Mac, for macOS, in native Swift, SwiftUI, and AppKit with zero external dependencies. Starting with **1.3 ("Better Together")**, the platform-agnostic business engine (`VRemindCore`) is split cleanly from the Mac bridge (`VRemindKit`) using only `Foundation` and `FoundationNetworking` — so it can run anywhere Swift runs (Linux, Windows, Googlebooks, or as a blueprint for KDE Plasma / GNOME ports). Check [Sources/VRemindCore/README.md](Sources/VRemindCore/README.md) if you want to build on top of it or port it!
+**The macOS app is 100% Mac-native — and the engine now lives in its own portable repo.** VRemind itself is built on Mac, for macOS, in native Swift, SwiftUI, and AppKit with zero third-party dependencies. Starting with **1.3 ("Better Together")**, the platform-agnostic business engine ([`VRemindCore`](https://github.com/momochisoundpost/VRemindCore)) is split into its own Swift package repository using only `Foundation` and `FoundationNetworking` — so it can run anywhere Swift runs (Linux, Windows, Googlebooks, or as a blueprint for KDE Plasma / GNOME ports). Check [`momochisoundpost/VRemindCore`](https://github.com/momochisoundpost/VRemindCore) if you want to build on top of it or port it!
 
 ### Why are you still supporting macOS 12 Monterey?
 Because I love the glowing Apple logo MacBook users! My very first long-form video was installing macOS Monterey on an early 2008 MacBook using OpenCore Legacy Patcher (OCLP)—so you already know what it leads to. Classic Intel Macs and OCLP-patched machines deserve great lightweight native software too, so VRemind was built from day one to run natively and smoothly on Monterey 12.0+ without sacrificing modern Swift concurrency or features.
@@ -172,25 +172,20 @@ You can also inspect the full source code and build it locally in seconds with `
 **Yes.** Caitlyn Momochi is just the default starter channel so the list isn't blank on first launch. Hover over the channel row, click the trash can icon, and add whoever you like.
 
 ### What if YouTube or Twitch changes its page or endpoint format?
-Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider`, upstream platform changes can be updated cleanly in `VRemindCore`. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the core and bridge are backed by 238 automated unit and view tests.
+Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider` in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore), upstream platform changes can be updated cleanly without touching macOS UI code. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the Mac bridge and core engine are backed by 238 automated unit and view tests (`169` in `VRemindKitTests` + `69` in `VRemindCoreTests`).
 
 ---
 
 ## Architecture Overview
 
-VRemind is structured into a portable pure-`Foundation` core engine (`VRemindCore`), a macOS bridge library (`VRemindKit`), a lightweight menu bar executable (`VRemind`), and a native WidgetKit extension (`VRemindWidget`):
+VRemind consumes the portable pure-`Foundation` core engine ([`VRemindCore`](https://github.com/momochisoundpost/VRemindCore)) via Swift Package Manager, paired with a macOS bridge library (`VRemindKit`), a lightweight menu bar executable (`VRemind`), and a native WidgetKit extension (`VRemindWidget`):
 
 ```text
 VRemind/
+├── Package.swift                 # Depends on VRemindCore (1.0.0+) via SwiftPM
 ├── Sources/
-│   ├── VRemindCore/              # Portable Foundation-only business engine (see Sources/VRemindCore/README.md)
-│   │   ├── Models/               # StreamPlatform, WatchedChannel, StreamStatus, ChannelFetchResult, AppSettings, ElapsedTime, GitHubRelease
-│   │   ├── Providers/            # StreamProvider, StreamProviderRegistry, YouTubeStreamProvider, TwitchStreamProvider, TwitchResponseParser
-│   │   ├── Services/             # StreamMonitorEngine, LivePageParser, CelebrationDetector
-│   │   ├── Persistence/          # ChannelStorage, SettingsStorage, JSONFileChannelStorage, JSONFileSettingsStorage
-│   │   ├── Utilities/            # SecretCheck, SemanticVersion
-│   │   └── AppConstants.swift    # Global constants
 │   ├── VRemindKit/               # Mac bridge library (AppKit, SwiftUI, Combine, UserNotifications, WidgetKit)
+│   │   ├── AppConstants.swift    # macOS app version, update endpoint, and creator/social constants
 │   │   ├── Services/             # StreamMonitorService, NotificationService, ChannelStore, PreferencesStore, UpdateService, WidgetSnapshotStore, VRemindTimelineProvider
 │   │   ├── Models/               # WidgetSnapshot, VRemindWidgetEntry
 │   │   ├── Utilities/            # LinkOpener, LaunchAtLoginHelper, BrandIcon
@@ -206,7 +201,6 @@ VRemind/
 │       ├── VRemindTimelineProvider.swift
 │       └── Views/                # SmallHeroWidgetView, MediumWatchlistWidgetView, LargeDashboardWidgetView
 ├── Tests/
-│   ├── VRemindCoreTests/         # Foundation-only core engine, provider, and storage tests
 │   └── VRemindKitTests/          # Mac bridge, migration, notification, widget, and view tests
 ├── Resources/
 │   ├── Info.plist                # App bundle metadata (LSUIElement = true for menu bar only)
@@ -217,7 +211,7 @@ VRemind/
     └── build-app.sh              # Universal binary & WidgetKit extension packager
 ```
 
-- **`VRemindCore`**: Pure `Foundation` (+ `FoundationNetworking`) business engine — stream providers, parsers, bounded-concurrency polling (`StreamMonitorEngine`), celebration detection, and persistence protocols, ready to compile or port beyond macOS. See [Sources/VRemindCore/README.md](Sources/VRemindCore/README.md).
+- **[`VRemindCore`](https://github.com/momochisoundpost/VRemindCore)**: Standalone pure `Foundation` (+ `FoundationNetworking`) business engine — domain models, zero-API-key stream providers & parsers, bounded-concurrency polling (`StreamMonitorEngine`), celebration detection, and persistence contracts, hosted separately for multi-platform portability.
 - **`VRemindKit`**: The macOS bridge connecting `VRemindCore` to `UserDefaults`, `NSWorkspace` display sleep/wake notifications, `UNUserNotificationCenter`, `WidgetKit` snapshot export, software updates, and SwiftUI views.
 - **`VRemind`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, deep links, and window controllers for Preferences, Onboarding, and Software Updates. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
 - **`VRemindWidget`**: Native WidgetKit extension embedded inside `Contents/PlugIns/VRemindWidget.appex`, built without Xcode using `-Xlinker -e -Xlinker _NSExtensionMain`.
@@ -233,7 +227,7 @@ VRemind/
 
 ## Running Tests
 
-Run the automated test suite (238 tests across 26 suites) using Apple's modern Swift Testing framework:
+Run the macOS app & bridge automated test suite (`169` tests across `16` suites) using Apple's modern Swift Testing framework:
 
 ```bash
 bash scripts/test.sh
@@ -242,9 +236,11 @@ bash scripts/test.sh
 You can also pass arguments through to `swift test`, such as running specific test suites:
 
 ```bash
-bash scripts/test.sh --filter VRemindCoreTests
-bash scripts/test.sh --filter LivePageParserTests
+bash scripts/test.sh --filter StreamMonitorServiceTests
+bash scripts/test.sh --filter MenuBarViewTests
 ```
+
+Core engine tests (`69` tests across `11` suites covering providers, parsers, polling, storage, and celebration logic) live in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore).
 
 ---
 
@@ -276,7 +272,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 <p align="center">
   <a href="https://apple.com"><img src="https://img.shields.io/badge/Platform-macOS%2012%2B-blue?logo=apple" alt="Platform: macOS 12+"></a>
   <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift" alt="Swift: 5.9+"></a>
-  <img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen" alt="Dependencies: Zero">
+  <img src="https://img.shields.io/badge/Dependencies-0%20Third--Party-brightgreen" alt="Dependencies: 0 Third-Party">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT"></a>
-  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-238%20Passing-success" alt="Tests: 238 Passing"></a>
+  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-169%20%2B%2069%20Core%20Passing-success" alt="Tests: 169 + 69 Core Passing"></a>
 </p>

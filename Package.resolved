@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "vremindcore",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/momochisoundpost/VRemindCore.git",
+      "state" : {
+        "revision" : "03e0764422ed36f01131af1ca8a85cf5ca69b00e",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 2
+}

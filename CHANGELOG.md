@@ -17,7 +17,7 @@ Missed opportunity on the version number aside, **1.3** is genuinely VRemind's *
 
 #### 🧱 VRemindCore & The Backend Overhaul
 - **Decoupled Core (`VRemindCore`) + Mac Bridge (`VRemindKit`):** Extracted all domain models, stream providers, polling/deduplication logic, celebration detection, and persistence contracts into `VRemindCore` using only `Foundation` (and `FoundationNetworking` on non-Apple platforms) — zero `AppKit`, `SwiftUI`, `Combine`, `UserNotifications`, or `WidgetKit` imports.
-- **Built for More Platforms & Feeds:** Introduces `StreamProvider` and `StreamProviderRegistry` (`YouTubeStreamProvider`, `TwitchStreamProvider`), making it straightforward to plug in more platforms and feeds (like RSS) down the road, and to build native frontends beyond macOS. See [Sources/VRemindCore/README.md](Sources/VRemindCore/README.md) for the portable engine docs and TDD guide.
+- **Built for More Platforms & Feeds:** Introduces `StreamProvider` and `StreamProviderRegistry` (`YouTubeStreamProvider`, `TwitchStreamProvider`), making it straightforward to plug in more platforms and feeds (like RSS) down the road, and to build native frontends beyond macOS. `VRemindCore` now lives in its own standalone repository at [momochisoundpost/VRemindCore](https://github.com/momochisoundpost/VRemindCore) with full architecture, provider, and porting docs.
 
 #### 🔄 Seamless v1.2 Migration & Widget Isolation
 - **Automatic Watchlist & Widget Upgrade:** Existing v1.2 `UserDefaults` watchlists and `widget-cache.json` entries automatically migrate as YouTube channels without losing notification history, timestamps, or cached avatars.
