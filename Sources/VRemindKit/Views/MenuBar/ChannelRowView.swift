@@ -64,20 +64,16 @@ public struct ChannelRowView: View {
     }
 
     public var formattedHandle: String {
-        channel.handle.hasPrefix("@") ? channel.handle : "@\(channel.handle)"
+        switch channel.platform {
+        case .youtube:
+            return channel.handle.hasPrefix("@") ? channel.handle : "@\(channel.handle)"
+        case .twitch:
+            return channel.handle.hasPrefix("@") ? String(channel.handle.dropFirst()) : channel.handle
+        }
     }
 
     public var streamURL: URL? {
-        switch status {
-        case .live(let videoId, _, _), .upcoming(let videoId, _, _):
-            if !videoId.isEmpty {
-                return LinkOpener.videoURL(for: videoId)
-            }
-        case .offline, .unknown:
-            break
-        }
-        let encodedHandle = formattedHandle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? formattedHandle
-        return URL(string: "https://www.youtube.com/\(encodedHandle)/live")
+        LinkOpener.streamURL(for: channel, status: status)
     }
 
     public var body: some View {
@@ -90,7 +86,7 @@ public struct ChannelRowView: View {
                 }
             }) {
                 HStack(spacing: 10) {
-                    ChannelAvatarView(url: channel.avatarURL, size: 36)
+                    ChannelAvatarView(url: channel.avatarURL, size: 36, platform: channel.platform)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -103,9 +99,9 @@ public struct ChannelRowView: View {
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
-                                .help(formattedHandle)
+                                .help("\(channel.platform.displayName): \(channel.handle)")
                         }
-                        .help(formattedHandle)
+                        .help("\(channel.platform.displayName): \(channel.handle)")
 
                         statusSubtitleView(isCelebration: celebration.isCelebration)
                     }

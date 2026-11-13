@@ -50,7 +50,7 @@ struct MenuBarViewTests {
         #expect(succeeded)
         #expect(viewModel.validationError == nil)
         #expect(viewModel.newHandleInput.isEmpty)
-        #expect(channelStore.channels.contains { $0.id == "@hololive_new" })
+        #expect(channelStore.channels.contains { $0.id == "youtube:@hololive_new" })
 
         // Duplicate input
         viewModel.newHandleInput = "@hololive_new"
@@ -73,10 +73,10 @@ struct MenuBarViewTests {
 
         viewModel.newHandleInput = "@to_remove"
         _ = viewModel.addChannel()
-        #expect(channelStore.channels.contains { $0.id == "@to_remove" })
+        #expect(channelStore.channels.contains { $0.id == "youtube:@to_remove" })
 
-        viewModel.removeChannel(id: "@to_remove")
-        #expect(!channelStore.channels.contains { $0.id == "@to_remove" })
+        viewModel.removeChannel(id: "youtube:@to_remove")
+        #expect(!channelStore.channels.contains { $0.id == "youtube:@to_remove" })
     }
 
     @Test @MainActor func testViewModelForwardsStoreAndMonitorChanges() async {
@@ -198,6 +198,13 @@ struct MenuBarViewTests {
         #expect(offlineRow.isLive == false)
         #expect(offlineRow.streamURL == URL(string: "https://www.youtube.com/@live/live")!)
         _ = offlineRow.body
+
+        let avatarDefault = ChannelAvatarView(url: nil, size: 36)
+        _ = avatarDefault.body
+        let avatarTwitch = ChannelAvatarView(url: nil, size: 36, platform: .twitch)
+        _ = avatarTwitch.body
+        let avatarYT = ChannelAvatarView(url: nil, size: 36, platform: .youtube)
+        _ = avatarYT.body
     }
 
     @Test func testElapsedTimeLiveDurationAndRelative() {
@@ -268,6 +275,7 @@ struct MenuBarViewTests {
         }
 
         let targetInput = Self.secretTargetHandle
+        let expectedTargetId = "youtube:\(targetInput.lowercased())"
 
         // 1. Abort action -> not added
         viewModel.newHandleInput = targetInput
@@ -276,7 +284,7 @@ struct MenuBarViewTests {
         #expect(!abortResult)
         #expect(presentedTitle != nil)
         #expect(viewModel.validationError == nil)
-        #expect(!channelStore.channels.contains { $0.id == targetInput.lowercased() })
+        #expect(!channelStore.channels.contains { $0.id == expectedTargetId })
 
         // 2. Cancel action -> not added
         presentedTitle = nil
@@ -286,7 +294,7 @@ struct MenuBarViewTests {
         #expect(!cancelResult)
         #expect(presentedTitle != nil)
         #expect(viewModel.validationError == nil)
-        #expect(!channelStore.channels.contains { $0.id == targetInput.lowercased() })
+        #expect(!channelStore.channels.contains { $0.id == expectedTargetId })
 
         // 3. Ignore action -> added!
         presentedTitle = nil
@@ -295,7 +303,68 @@ struct MenuBarViewTests {
         let ignoreResult = viewModel.addChannel()
         #expect(ignoreResult)
         #expect(presentedTitle != nil)
-        #expect(channelStore.channels.contains { $0.id == targetInput.lowercased() })
+        #expect(channelStore.channels.contains { $0.id == expectedTargetId })
+    }
+
+    @Test @MainActor func testAddTwitchChannelViaPlatformSelection() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let notifier = NotificationService(center: NoOpNotificationCenter())
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) }
+        )
+        let viewModel = MenuBarStatusViewModel(channelStore: channelStore, monitorService: monitor)
+
+        #expect(viewModel.selectedPlatform == .youtube)
+        viewModel.selectedPlatform = .twitch
+        viewModel.newHandleInput = "ironmouse"
+        let success = viewModel.addChannel()
+
+        #expect(success)
+        #expect(viewModel.validationError == nil)
+        #expect(viewModel.newHandleInput.isEmpty)
+        #expect(channelStore.channels.contains { $0.id == "twitch:ironmouse" && $0.platform == .twitch })
+    }
+
+    @Test @MainActor func testAddChannelSmartURLAutoDetection() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let notifier = NotificationService(center: NoOpNotificationCenter())
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) }
+        )
+        let viewModel = MenuBarStatusViewModel(channelStore: channelStore, monitorService: monitor)
+
+        // selectedPlatform is youtube, but entering Twitch URL auto-detects twitch
+        #expect(viewModel.selectedPlatform == .youtube)
+        viewModel.newHandleInput = "https://www.twitch.tv/ironmouse"
+        let success = viewModel.addChannel()
+
+        #expect(success)
+        #expect(viewModel.validationError == nil)
+        #expect(channelStore.channels.contains { $0.id == "twitch:ironmouse" && $0.platform == .twitch })
+    }
+
+    @Test func testTwitchChannelRowViewStreamURLAndFormattedHandle() {
+        let twitchChannel = WatchedChannel(
+            id: "twitch:ironmouse",
+            platform: .twitch,
+            name: "ironmouse",
+            handle: "ironmouse"
+        )
+        let row = ChannelRowView(
+            channel: twitchChannel,
+            status: .live(videoId: "", title: "Live on Twitch", startedAt: Date()),
+            onDelete: {}
+        )
+        #expect(row.streamURL == URL(string: "https://www.twitch.tv/ironmouse"))
+        #expect(row.formattedHandle == "ironmouse")
     }
 
     @Test func testChannelRowFormattedHandleAndTooltip() {

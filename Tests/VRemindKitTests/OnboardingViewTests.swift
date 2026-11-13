@@ -36,7 +36,7 @@ struct OnboardingViewTests {
         #expect(didComplete == true)
         #expect(prefs.settings.hasCompletedOnboarding == true)
         #expect(store.channels.count == 1)
-        #expect(store.channels.first?.id == "@bukancaitlyn")
+        #expect(store.channels.first?.id == "youtube:@bukancaitlyn")
         #expect(viewModel.validationError == nil)
     }
 
@@ -50,7 +50,7 @@ struct OnboardingViewTests {
 
         #expect(success == true)
         #expect(prefs.settings.hasCompletedOnboarding == true)
-        #expect(store.channels.contains(where: { $0.id == "@bukancaitlyn" }))
+        #expect(store.channels.contains(where: { $0.id == "youtube:@bukancaitlyn" }))
         #expect(viewModel.validationError == nil)
     }
 
@@ -58,7 +58,7 @@ struct OnboardingViewTests {
         let prefs = PreferencesStore(userDefaults: makeTestDefaults())
         let store = ChannelStore(userDefaults: makeTestDefaults())
         #expect(store.channels.count == 1)
-        #expect(store.channels.first?.id == "@bukancaitlyn")
+        #expect(store.channels.first?.id == "youtube:@bukancaitlyn")
 
         let viewModel = OnboardingViewModel(channelStore: store, preferencesStore: prefs)
         viewModel.customHandle = "https://www.youtube.com/@pekorach"
@@ -67,7 +67,7 @@ struct OnboardingViewTests {
         #expect(success == true)
         #expect(store.channels.count == 1)
         #expect(store.channels.first?.handle == "@pekorach")
-        #expect(!store.channels.contains(where: { $0.id == "@bukancaitlyn" }))
+        #expect(!store.channels.contains(where: { $0.id == "youtube:@bukancaitlyn" }))
     }
 
     @Test @MainActor func testOnboardingAppendsChannelWhenMultipleChannelsExist() async {
@@ -82,9 +82,40 @@ struct OnboardingViewTests {
 
         #expect(success == true)
         #expect(store.channels.count == 3)
-        #expect(store.channels.contains(where: { $0.id == "@bukancaitlyn" }))
+        #expect(store.channels.contains(where: { $0.id == "youtube:@bukancaitlyn" }))
         #expect(store.channels.contains(where: { $0.handle == "@suiseihoshimati" }))
         #expect(store.channels.contains(where: { $0.handle == "@pekorach" }))
+    }
+
+    @Test @MainActor func testOnboardingWithTwitchPlatform() async {
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let store = ChannelStore(userDefaults: makeTestDefaults())
+        let viewModel = OnboardingViewModel(channelStore: store, preferencesStore: prefs)
+
+        #expect(viewModel.selectedPlatform == .youtube)
+        viewModel.selectedPlatform = .twitch
+        viewModel.customHandle = "ironmouse"
+        let success = viewModel.completeOnboarding()
+
+        #expect(success == true)
+        #expect(prefs.settings.hasCompletedOnboarding == true)
+        #expect(store.channels.contains { $0.id == "twitch:ironmouse" && $0.platform == .twitch })
+        #expect(!store.channels.contains { $0.id == "youtube:@bukancaitlyn" })
+    }
+
+    @Test @MainActor func testOnboardingAutoDetectsTwitchURL() async {
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let store = ChannelStore(userDefaults: makeTestDefaults())
+        let viewModel = OnboardingViewModel(channelStore: store, preferencesStore: prefs)
+
+        #expect(viewModel.selectedPlatform == .youtube)
+        viewModel.customHandle = "https://www.twitch.tv/ironmouse"
+        let success = viewModel.completeOnboarding()
+
+        #expect(success == true)
+        #expect(prefs.settings.hasCompletedOnboarding == true)
+        #expect(store.channels.contains { $0.id == "twitch:ironmouse" && $0.platform == .twitch })
+        #expect(!store.channels.contains { $0.id == "youtube:@bukancaitlyn" })
     }
 
     @Test @MainActor func testOnboardingInvalidHandleFailsValidation() async {

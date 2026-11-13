@@ -3,6 +3,7 @@ import UserNotifications
 
 @MainActor
 public final class OnboardingViewModel: ObservableObject {
+    @Published public var selectedPlatform: StreamPlatform = .youtube
     @Published public var customHandle: String = "@bukancaitlyn"
     @Published public private(set) var validationError: String? = nil
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
@@ -41,20 +42,33 @@ public final class OnboardingViewModel: ObservableObject {
             validationError = nil
             ensureDefaultChannel()
         } else {
-            guard let normalized = WatchedChannel.normalizeHandle(trimmed) else {
-                validationError = "Please enter a valid YouTube handle (e.g. @channel)"
+            let resolvedPlatform: StreamPlatform
+            let normalized: String
+
+            if let detected = WatchedChannel.detectPlatformAndHandle(from: trimmed) {
+                resolvedPlatform = detected.platform
+                normalized = detected.handle
+            } else if let norm = WatchedChannel.normalizeHandle(trimmed, for: selectedPlatform) {
+                resolvedPlatform = selectedPlatform
+                normalized = norm
+            } else {
+                validationError = selectedPlatform == .youtube
+                    ? "Please enter a valid YouTube handle (e.g. @channel)"
+                    : "Please enter a valid Twitch username"
                 return false
             }
             validationError = nil
 
-            if normalized.lowercased() == "@bukancaitlyn" {
+            let isDefaultYouTube = resolvedPlatform == .youtube && normalized.lowercased() == "@bukancaitlyn"
+            if isDefaultYouTube {
                 ensureDefaultChannel()
             } else {
-                if channelStore.channels.count == 1 && channelStore.channels.first?.id.lowercased() == "@bukancaitlyn" {
-                    channelStore.removeChannel(id: "@bukancaitlyn")
-                    channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil)
+                let defaultId = "youtube:@bukancaitlyn"
+                if channelStore.channels.count == 1 && (channelStore.channels.first?.id.lowercased() == defaultId || channelStore.channels.first?.id.lowercased() == "@bukancaitlyn") {
+                    channelStore.removeChannel(id: defaultId)
+                    channelStore.addChannel(platform: resolvedPlatform, handle: normalized, name: nil, avatarURL: nil)
                 } else {
-                    channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil)
+                    channelStore.addChannel(platform: resolvedPlatform, handle: normalized, name: nil, avatarURL: nil)
                 }
             }
         }
@@ -73,8 +87,9 @@ public final class OnboardingViewModel: ObservableObject {
     }
 
     private func ensureDefaultChannel() {
-        if !channelStore.channels.contains(where: { $0.id.lowercased() == "@bukancaitlyn" }) {
-            channelStore.addChannel(handle: "@bukancaitlyn", name: "Caitlyn Momochi", avatarURL: nil)
+        let defaultId = "youtube:@bukancaitlyn"
+        if !channelStore.channels.contains(where: { $0.id.lowercased() == defaultId || $0.id.lowercased() == "@bukancaitlyn" }) {
+            channelStore.addChannel(platform: .youtube, handle: "@bukancaitlyn", name: "Caitlyn Momochi", avatarURL: nil)
         }
     }
 }
@@ -110,18 +125,56 @@ public struct OnboardingView: View {
                 Text("Favorite VTuber")
                     .font(.headline)
 
-                TextField("@handle", text: $viewModel.customHandle)
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(StreamPlatform.allCases, id: \.self) { platform in
+                            Button(action: {
+                                viewModel.selectedPlatform = platform
+                            }) {
+                                Text(platform.displayName)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(Theme.platformColor(for: viewModel.selectedPlatform))
+                                .frame(width: 8, height: 8)
+                            Text(viewModel.selectedPlatform.displayName)
+                                .font(.system(size: 13))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(NSColor.controlBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+
+                    TextField(
+                        viewModel.selectedPlatform == .youtube ? "@handle" : "username",
+                        text: $viewModel.customHandle
+                    )
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         viewModel.completeOnboarding()
                     }
+                }
 
                 if let error = viewModel.validationError {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.red)
                 } else {
-                    Text("Enter a YouTube handle starting with @ (defaults to @bukancaitlyn).")
+                    Text("Enter a YouTube @handle or Twitch username (defaults to @bukancaitlyn on YouTube).")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

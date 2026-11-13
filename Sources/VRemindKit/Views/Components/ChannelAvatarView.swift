@@ -4,11 +4,18 @@ public struct ChannelAvatarView: View {
     public let url: URL?
     public let size: CGFloat
     public let fallbackSymbol: String
+    public let platform: StreamPlatform?
 
-    public init(url: URL?, size: CGFloat = 36, fallbackSymbol: String = "sparkles") {
+    public init(
+        url: URL?,
+        size: CGFloat = 36,
+        fallbackSymbol: String = "sparkles",
+        platform: StreamPlatform? = nil
+    ) {
         self.url = url
         self.size = size
         self.fallbackSymbol = fallbackSymbol
+        self.platform = platform
     }
 
     public var body: some View {
@@ -36,5 +43,10 @@ public struct ChannelAvatarView: View {
             }
         }
         .frame(width: size, height: size)
+        .overlay(alignment: .bottomTrailing) {
+            if let platform {
+                PlatformBadgeView(platform: platform, size: max(9, size * 0.30))
+            }
+        }
     }
 }

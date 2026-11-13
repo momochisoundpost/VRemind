@@ -40,6 +40,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
         _ ignore: String
     ) -> SecretAlertAction
 
+    @Published public var selectedPlatform: StreamPlatform = .youtube
     @Published public var newHandleInput: String = ""
     @Published public private(set) var validationError: String? = nil
 
@@ -146,18 +147,32 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
     @discardableResult
     public func addChannel() -> Bool {
-        guard let normalized = WatchedChannel.normalizeHandle(newHandleInput) else {
-            validationError = "Please enter a valid channel handle or YouTube URL"
+        let trimmed = newHandleInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let resolvedPlatform: StreamPlatform
+        let normalized: String
+
+        if let detected = WatchedChannel.detectPlatformAndHandle(from: trimmed) {
+            resolvedPlatform = detected.platform
+            normalized = detected.handle
+        } else if let norm = WatchedChannel.normalizeHandle(trimmed, for: selectedPlatform) {
+            resolvedPlatform = selectedPlatform
+            normalized = norm
+        } else {
+            validationError = selectedPlatform == .youtube
+                ? "Please enter a valid channel handle or YouTube URL"
+                : "Please enter a valid Twitch username or URL"
             return false
         }
 
-        let targetId = normalized.lowercased()
+        let targetId = WatchedChannel.makeID(platform: resolvedPlatform, handle: normalized).lowercased()
         if channelStore.channels.contains(where: { $0.id.lowercased() == targetId }) {
             validationError = "Channel is already in your watchlist"
             return false
         }
 
-        if SecretCheck.isTarget(normalized) {
+        if resolvedPlatform == .youtube && SecretCheck.isTarget(normalized) {
             let strings = SecretCheck.dialogStrings()
             let presenter = secretAlertPresenter ?? Self.defaultAlertPresenter
             let action = presenter(strings.title, strings.message, strings.abort, strings.cancel, strings.ignore)
@@ -167,7 +182,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
             }
         }
 
-        guard channelStore.addChannel(handle: normalized, name: nil, avatarURL: nil) != nil else {
+        guard channelStore.addChannel(platform: resolvedPlatform, handle: normalized, name: nil, avatarURL: nil) != nil else {
             validationError = "Failed to add channel"
             return false
         }
@@ -176,7 +191,9 @@ public final class MenuBarStatusViewModel: ObservableObject {
         validationError = nil
 
         Task {
-            await monitorService.checkDeveloperBirthdayNotificationIfNeeded(date: dateProvider())
+            if resolvedPlatform == .youtube {
+                await monitorService.checkDeveloperBirthdayNotificationIfNeeded(date: dateProvider())
+            }
             await monitorService.refreshAll()
         }
         return true
@@ -331,7 +348,7 @@ public struct MenuBarStatusView: View {
                     Text("No channels watched")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                    Text("Add a YouTube handle below to track live streams.")
+                    Text("Add a YouTube or Twitch channel below to track live streams.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
