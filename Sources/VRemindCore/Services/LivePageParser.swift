@@ -1,12 +1,5 @@
 import Foundation
 
-public enum LivePageResult: Equatable, Sendable {
-    case live(videoId: String, title: String, startedAt: Date?)
-    case upcoming(videoId: String, title: String, scheduledStartTime: Date?)
-    case notLive(channelTitle: String?, avatarURL: URL?)
-    case unrecognized
-}
-
 public enum LivePageParser {
     public static func parse(html: String) -> LivePageResult {
         if let jsonString = extractPlayerResponseJSON(from: html) {
