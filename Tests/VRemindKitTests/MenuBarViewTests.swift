@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import SwiftUI
 import Testing
+import UserNotifications
 @testable import VRemindKit
 
 struct MenuBarViewTests {
@@ -305,5 +306,52 @@ struct MenuBarViewTests {
         let channelWithoutAt = WatchedChannel(id: "plain", name: "Plain", handle: "plaintuber")
         let row2 = ChannelRowView(channel: channelWithoutAt, status: .offline(lastStreamedAt: nil), onDelete: {})
         #expect(row2.formattedHandle == "@plaintuber")
+    }
+
+    @Test @MainActor func testAddingCaitlynOnDec31TriggersDeveloperBirthdayNotification() async throws {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        channelStore.removeChannel(id: "@bukancaitlyn")
+        #expect(!channelStore.channels.contains { $0.id == "@bukancaitlyn" })
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockCenter = MockNotificationCenter()
+        let notifier = NotificationService(center: mockCenter)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        var comps = DateComponents()
+        comps.year = 2026
+        comps.month = 12
+        comps.day = 31
+        comps.hour = 12
+        let dec31_2026 = calendar.date(from: comps)!
+
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) },
+            dateProvider: { dec31_2026 },
+            calendar: calendar
+        )
+
+        let viewModel = MenuBarStatusViewModel(
+            channelStore: channelStore,
+            monitorService: monitor,
+            dateProvider: { dec31_2026 },
+            calendar: calendar
+        )
+
+        viewModel.newHandleInput = "@bukancaitlyn"
+        let added = viewModel.addChannel()
+        #expect(added)
+
+        for _ in 0..<10 {
+            if !mockCenter.requests.isEmpty { break }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        #expect(mockCenter.requests.contains(where: { $0.identifier == "dev-birthday-2026" }))
     }
 }

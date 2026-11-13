@@ -37,6 +37,8 @@ public final class StreamMonitorService: ObservableObject {
     public private(set) var isPausedForSleep: Bool = false
 
     private let notificationCenter: NotificationCenter
+    private let dateProvider: @Sendable () -> Date
+    private let calendar: Calendar
     private var pollingTask: Task<Void, Never>?
     private var pollingInterval: TimeInterval = AppConstants.livePollInterval
     private var sleepObserver: (any NSObjectProtocol)?
@@ -49,7 +51,9 @@ public final class StreamMonitorService: ObservableObject {
         notificationService: NotificationService,
         fetcher: @escaping Fetcher = StreamMonitorService.defaultFetcher,
         notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
-        snapshotStore: WidgetSnapshotStoreProtocol = WidgetSnapshotStore.shared
+        snapshotStore: WidgetSnapshotStoreProtocol = WidgetSnapshotStore.shared,
+        dateProvider: @escaping @Sendable () -> Date = { Date() },
+        calendar: Calendar = .current
     ) {
         self.channelStore = channelStore
         self.preferencesStore = preferencesStore
@@ -57,6 +61,8 @@ public final class StreamMonitorService: ObservableObject {
         self.fetcher = fetcher
         self.notificationCenter = notificationCenter
         self.snapshotStore = snapshotStore
+        self.dateProvider = dateProvider
+        self.calendar = calendar
     }
 
     public var isAnyLive: Bool {
@@ -83,6 +89,25 @@ public final class StreamMonitorService: ObservableObject {
         }
     }
 
+    public func checkDeveloperBirthdayNotificationIfNeeded(date: Date? = nil) async {
+        let now = date ?? dateProvider()
+        guard CelebrationDetector.isDeveloperBirthday(date: now, calendar: calendar) else {
+            return
+        }
+        guard channelStore.channels.contains(where: { CelebrationDetector.isTargetDeveloperChannel($0) }) else {
+            return
+        }
+        let year = calendar.component(.year, from: now)
+        guard preferencesStore.settings.lastNotifiedDevBirthdayYear != year else {
+            return
+        }
+        preferencesStore.settings.lastNotifiedDevBirthdayYear = year
+        await notificationService.notifyDeveloperBirthday(
+            year: year,
+            playSound: preferencesStore.settings.playNotificationSound
+        )
+    }
+
     public func refreshAll() async {
         if isRefreshing {
             needsAnotherRefresh = true
@@ -98,6 +123,7 @@ public final class StreamMonitorService: ObservableObject {
     }
 
     private func performRefreshPass() async {
+        await checkDeveloperBirthdayNotificationIfNeeded()
         let channels = channelStore.channels
         guard !channels.isEmpty else {
             await exportWidgetSnapshot()

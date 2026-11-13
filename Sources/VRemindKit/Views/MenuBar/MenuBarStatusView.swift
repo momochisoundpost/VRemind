@@ -70,17 +70,30 @@ public final class MenuBarStatusViewModel: ObservableObject {
     public let channelStore: ChannelStore
     public let monitorService: StreamMonitorService
 
+    private let dateProvider: () -> Date
+    private let calendar: Calendar
     private var cancellables = Set<AnyCancellable>()
 
-    public init(channelStore: ChannelStore, monitorService: StreamMonitorService) {
+    public init(
+        channelStore: ChannelStore,
+        monitorService: StreamMonitorService,
+        dateProvider: @escaping () -> Date = { Date() },
+        calendar: Calendar = .current
+    ) {
         self.channelStore = channelStore
         self.monitorService = monitorService
+        self.dateProvider = dateProvider
+        self.calendar = calendar
 
-        Publishers.Merge(channelStore.objectWillChange, monitorService.objectWillChange)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+        Publishers.Merge3(
+            channelStore.objectWillChange,
+            monitorService.objectWillChange,
+            monitorService.preferencesStore.objectWillChange
+        )
+        .sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        .store(in: &cancellables)
     }
 
     public nonisolated static func splitSections(
@@ -163,6 +176,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
         validationError = nil
 
         Task {
+            await monitorService.checkDeveloperBirthdayNotificationIfNeeded(date: dateProvider())
             await monitorService.refreshAll()
         }
         return true

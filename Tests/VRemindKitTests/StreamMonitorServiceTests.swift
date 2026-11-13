@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Testing
+import UserNotifications
 @testable import VRemindKit
 
 func XCTAssertEqual<T: Equatable>(_ a: T, _ b: T, _ message: String = "") {
@@ -825,5 +826,89 @@ struct StreamMonitorServiceTests {
         if let lastWrite = spySnapshotStore.lastWrite {
             #expect(lastWrite.channels.isEmpty)
         }
+    }
+
+    @Test @MainActor func testDeveloperBirthdayNotificationTriggersOncePerYearOnDec31() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockCenter = MockNotificationCenter()
+        let notifier = NotificationService(center: mockCenter)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        func makeDate(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
+            var comps = DateComponents()
+            comps.year = year
+            comps.month = month
+            comps.day = day
+            comps.hour = hour
+            return calendar.date(from: comps)!
+        }
+
+        let currentDate = ValueBox(makeDate(year: 2026, month: 12, day: 31))
+
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) },
+            dateProvider: { currentDate.get() },
+            calendar: calendar
+        )
+
+        await monitor.refreshAll()
+        #expect(mockCenter.requests.count == 1)
+        #expect(mockCenter.requests.contains(where: { $0.identifier == "dev-birthday-2026" }))
+        #expect(prefs.settings.lastNotifiedDevBirthdayYear == 2026)
+
+        await monitor.refreshAll()
+        #expect(mockCenter.requests.count == 1)
+        #expect(prefs.settings.lastNotifiedDevBirthdayYear == 2026)
+
+        currentDate.set(makeDate(year: 2027, month: 12, day: 31))
+        await monitor.refreshAll()
+        #expect(mockCenter.requests.count == 2)
+        #expect(mockCenter.requests.contains(where: { $0.identifier == "dev-birthday-2027" }))
+        #expect(prefs.settings.lastNotifiedDevBirthdayYear == 2027)
+    }
+
+    @Test @MainActor func testDeveloperBirthdayDoesNotTriggerIn1999OrNonDec31() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let mockCenter = MockNotificationCenter()
+        let notifier = NotificationService(center: mockCenter)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        func makeDate(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
+            var comps = DateComponents()
+            comps.year = year
+            comps.month = month
+            comps.day = day
+            comps.hour = hour
+            return calendar.date(from: comps)!
+        }
+
+        let currentDate = ValueBox(makeDate(year: 1999, month: 12, day: 31))
+
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: notifier,
+            fetcher: { _ in (Data(), HTTPURLResponse()) },
+            dateProvider: { currentDate.get() },
+            calendar: calendar
+        )
+
+        await monitor.refreshAll()
+        #expect(mockCenter.requests.isEmpty)
+        #expect(prefs.settings.lastNotifiedDevBirthdayYear == nil)
+
+        currentDate.set(makeDate(year: 2026, month: 11, day: 12))
+        await monitor.refreshAll()
+        #expect(mockCenter.requests.isEmpty)
+        #expect(prefs.settings.lastNotifiedDevBirthdayYear == nil)
     }
 }
