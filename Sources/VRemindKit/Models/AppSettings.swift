@@ -15,6 +15,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var updateConsent: UpdateConsentState
     public var lastUpdateCheckDate: Date?
     public var ignoredUpdateTag: String?
+    public var reduceMotion: Bool
+    public var lastNotifiedDevBirthdayYear: Int?
 
     public init(
         launchAtLogin: Bool = false,
@@ -24,7 +26,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         hasCompletedOnboarding: Bool = false,
         updateConsent: UpdateConsentState = .undecided,
         lastUpdateCheckDate: Date? = nil,
-        ignoredUpdateTag: String? = nil
+        ignoredUpdateTag: String? = nil,
+        reduceMotion: Bool = false,
+        lastNotifiedDevBirthdayYear: Int? = nil
     ) {
         self.launchAtLogin = launchAtLogin
         self.notifyOnLive = notifyOnLive
@@ -34,6 +38,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.updateConsent = updateConsent
         self.lastUpdateCheckDate = lastUpdateCheckDate
         self.ignoredUpdateTag = ignoredUpdateTag
+        self.reduceMotion = reduceMotion
+        self.lastNotifiedDevBirthdayYear = lastNotifiedDevBirthdayYear
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -45,6 +51,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case updateConsent
         case lastUpdateCheckDate
         case ignoredUpdateTag
+        case reduceMotion
+        case lastNotifiedDevBirthdayYear
     }
 
     public init(from decoder: Decoder) throws {
@@ -57,6 +65,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         updateConsent = (try? container.decodeIfPresent(UpdateConsentState.self, forKey: .updateConsent)) ?? .undecided
         lastUpdateCheckDate = try? container.decodeIfPresent(Date.self, forKey: .lastUpdateCheckDate)
         ignoredUpdateTag = try? container.decodeIfPresent(String.self, forKey: .ignoredUpdateTag)
+        reduceMotion = (try? container.decodeIfPresent(Bool.self, forKey: .reduceMotion)) ?? false
+        lastNotifiedDevBirthdayYear = try? container.decodeIfPresent(Int.self, forKey: .lastNotifiedDevBirthdayYear)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -69,5 +79,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(updateConsent, forKey: .updateConsent)
         try container.encodeIfPresent(lastUpdateCheckDate, forKey: .lastUpdateCheckDate)
         try container.encodeIfPresent(ignoredUpdateTag, forKey: .ignoredUpdateTag)
+        try container.encode(reduceMotion, forKey: .reduceMotion)
+        try container.encodeIfPresent(lastNotifiedDevBirthdayYear, forKey: .lastNotifiedDevBirthdayYear)
     }
 }

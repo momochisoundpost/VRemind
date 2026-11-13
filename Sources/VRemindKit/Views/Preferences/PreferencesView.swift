@@ -185,6 +185,12 @@ public struct PreferencesView: View {
                     )
                 )
                 .toggleStyle(.checkbox)
+
+                Toggle(
+                    "Reduce Motion (Turn off flashing & popover confetti)",
+                    isOn: $preferencesStore.settings.reduceMotion
+                )
+                .toggleStyle(.checkbox)
             }
 
             Divider()

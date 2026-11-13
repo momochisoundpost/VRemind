@@ -97,5 +97,32 @@ struct PreferencesStoreTests {
         #expect(store.settings.updateConsent == .undecided)
         #expect(store.settings.lastUpdateCheckDate == nil)
         #expect(store.settings.ignoredUpdateTag == nil)
+        #expect(store.settings.reduceMotion == false)
+        #expect(store.settings.lastNotifiedDevBirthdayYear == nil)
+    }
+
+    @Test("Reduce motion and developer birthday year persist and reset")
+    @MainActor
+    func testReduceMotionAndDevBirthdayYearPersistence() async {
+        let defaults = makeTestDefaults()
+        let store1 = PreferencesStore(userDefaults: defaults)
+
+        #expect(store1.settings.reduceMotion == false)
+        #expect(store1.settings.lastNotifiedDevBirthdayYear == nil)
+
+        store1.settings.reduceMotion = true
+        store1.settings.lastNotifiedDevBirthdayYear = 2026
+
+        let store2 = PreferencesStore(userDefaults: defaults)
+        #expect(store2.settings.reduceMotion == true)
+        #expect(store2.settings.lastNotifiedDevBirthdayYear == 2026)
+
+        store2.resetToDefaults()
+        #expect(store2.settings.reduceMotion == false)
+        #expect(store2.settings.lastNotifiedDevBirthdayYear == nil)
+
+        let store3 = PreferencesStore(userDefaults: defaults)
+        #expect(store3.settings.reduceMotion == false)
+        #expect(store3.settings.lastNotifiedDevBirthdayYear == nil)
     }
 }

@@ -308,4 +308,25 @@ struct PreferencesViewTests {
 
         _ = view.body
     }
+
+    @Test @MainActor func testReduceMotionBindingAndReset() {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
+
+        #expect(prefs.settings.reduceMotion == false)
+        prefs.settings.reduceMotion = true
+        #expect(prefs.settings.reduceMotion == true)
+
+        let reloadedPrefs = PreferencesStore(userDefaults: defaults)
+        #expect(reloadedPrefs.settings.reduceMotion == true)
+
+        viewModel.performFactoryReset()
+        #expect(prefs.settings.reduceMotion == false)
+
+        let view = PreferencesView(viewModel: viewModel)
+        let controller = NSHostingController(rootView: view)
+        #expect(controller.view.bounds.width >= 0)
+    }
 }
