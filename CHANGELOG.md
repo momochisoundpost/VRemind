@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.1] - 2026-11-13
+
+### Release Notes
+> *I am thrilled and humbled to announce that my native macOS Swift Markdown renderer has been featured on the XERJ Corpus Hub MCP index — empowering fellow vibecoders to leverage battle-tested, zero-dependency solutions at scale. Agree? 🙏✨*
+
+Yo dawg, we heard you still liked updates, so we updated the updater's updater again — except this time it's an ultra-lightweight, full native Swift Markdown and video viewer (and yes, blockquotes like the one above actually render properly now instead of leaking a literal `>`). On top of that, Preferences now lets you back up and restore your entire watchlist and settings as a single JSON file.
+
+### Highlights & What's New
+
+#### ✨ Full Native Markdown & Video Viewer (`MarkdownView` & `MarkdownVideoPlayerView`)
+- **Formatting Fixed:** Properly renders blockquotes (`>`), nested sub-bullets (`◦`), numbered lists (`1.`), task checklists (`- [ ]` / `- [x]`), GFM tables, `<br>` line breaks, and clickable bare URLs without leaking raw markdown characters.
+- **Lightweight Native Video:** Plays GitHub `<video>` / `<source>` embeds and `.mp4`/`.mov`/`.m4v` clips natively via `AVKit` (`AVPlayerView`, zero `WKWebView`, zero third-party packages). Clips autoplay muted on loop with a mute/unmute pill, tap-to-pause, an **Open Video in Browser** fallback on failure, and immediate teardown on close.
+
+#### 💾 JSON Backup & Restore (`Preferences → General`)
+- **Export & Restore:** Added a **Data & Backup** section above the Danger Zone using native `NSSavePanel` and `NSOpenPanel` dialogs to export/restore a versioned `.json` snapshot (`vremind-backup-YYYY-MM-DD.json`).
+- **Clean State Overwrite:** Validates JSON and schema compatibility before prompting for confirmation, sanitizes restored state, syncs Launch at Login, clears stale in-memory stream statuses, and immediately refreshes Desktop Widgets.
+
+---
+
+### Maintenance Mode
+With `VRemindCore` and `VRemind` now cleanly separated, **VRemind is entering maintenance mode** — no new features are planned unless someone contributes one via PR or manages to scrape **Kick.com** without API keys.
+
+---
+
 ## [1.3] - 2026-11-13
 
 ### Release Notes

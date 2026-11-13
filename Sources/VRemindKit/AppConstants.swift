@@ -1,8 +1,8 @@
 import Foundation
 
 public enum AppConstants {
-    public static let appVersion = "1.3.0"
-    public static let releaseNotes = "The Better Together Update"
+    public static let appVersion = "1.3.1"
+    public static let releaseNotes = "The \"Yo Dawg, We Updated the Updater Again\" Update"
     public static let githubReleasesLatestURL = URL(string: "https://api.github.com/repos/momochisoundpost/VRemind/releases/latest")!
     public static let policeSirenURL = URL(string: "https://www.youtube.com/watch?v=HKieGUH9pzg")!
     public static let channelHandle = "@bukancaitlyn"
