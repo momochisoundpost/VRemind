@@ -38,15 +38,21 @@ extension View {
 public struct ChannelRowView: View {
     public let channel: WatchedChannel
     public let status: StreamStatus
+    public let reduceMotion: Bool
+    public let dateProvider: () -> Date
     public let onDelete: () -> Void
 
     public init(
         channel: WatchedChannel,
         status: StreamStatus,
+        reduceMotion: Bool = false,
+        dateProvider: @escaping () -> Date = { Date() },
         onDelete: @escaping () -> Void
     ) {
         self.channel = channel
         self.status = status
+        self.reduceMotion = reduceMotion
+        self.dateProvider = dateProvider
         self.onDelete = onDelete
     }
 
@@ -75,6 +81,8 @@ public struct ChannelRowView: View {
     }
 
     public var body: some View {
+        let celebration = CelebrationDetector.detect(status: status, channel: channel, date: dateProvider())
+
         HStack(spacing: 10) {
             Button(action: {
                 if let streamURL {
@@ -99,13 +107,24 @@ public struct ChannelRowView: View {
                         }
                         .help(formattedHandle)
 
-                        statusSubtitleView
+                        statusSubtitleView(isCelebration: celebration.isCelebration)
                     }
 
                     Spacer(minLength: 4)
 
                     if isLive {
-                        StatusBadge(isLive: true)
+                        StatusBadge(
+                            isLive: true,
+                            isCelebration: celebration.isCelebration,
+                            reduceMotion: reduceMotion
+                        )
+                    } else if case .upcoming = status, celebration.isCelebration {
+                        StatusBadge(
+                            isLive: false,
+                            label: "UPCOMING",
+                            isCelebration: true,
+                            reduceMotion: reduceMotion
+                        )
                     }
                 }
             }
@@ -126,7 +145,7 @@ public struct ChannelRowView: View {
     }
 
     @ViewBuilder
-    private var statusSubtitleView: some View {
+    private func statusSubtitleView(isCelebration: Bool) -> some View {
         switch status {
         case .live(_, let title, let startedAt):
             VStack(alignment: .leading, spacing: 1) {
@@ -139,6 +158,7 @@ public struct ChannelRowView: View {
                 Text("Live for \(ElapsedTime.liveDuration(since: startedAt))")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(Theme.live)
+                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
             }
 
         case .upcoming(_, let title, let scheduledStartTime):
@@ -152,6 +172,7 @@ public struct ChannelRowView: View {
                 Text(formatScheduledTime(scheduledStartTime))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.orange)
+                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
             }
 
         case .offline(let lastStreamedAt):

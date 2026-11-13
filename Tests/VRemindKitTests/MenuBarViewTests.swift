@@ -354,4 +354,76 @@ struct MenuBarViewTests {
 
         #expect(mockCenter.requests.contains(where: { $0.identifier == "dev-birthday-2026" }))
     }
+
+    @Test @MainActor func testCelebrationViewModelHelpersAndStatusButtonFlashRule() async {
+        #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: true, reduceMotion: false) == true)
+        #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: true, reduceMotion: true) == false)
+        #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: false, reduceMotion: false) == false)
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        channelStore.addChannel(handle: "@bday", name: "Bday")
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        prefs.settings.reduceMotion = true
+
+        let liveHTML = """
+        <html><body><script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":true,"title":"Happy Birthday Stream!","videoId":"v1"}};</script></body></html>
+        """
+        let okResponse = HTTPURLResponse(
+            url: URL(string: "https://www.youtube.com/@bday/live")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: NotificationService(center: MockNotificationCenter()),
+            fetcher: { _ in (Data(liveHTML.utf8), okResponse) },
+            dateProvider: { now }
+        )
+
+        await monitor.refreshAll()
+
+        let viewModel = MenuBarStatusViewModel(
+            channelStore: channelStore,
+            monitorService: monitor,
+            dateProvider: { now }
+        )
+
+        #expect(viewModel.isPopoverConfettiActive(date: now) == false)
+
+        prefs.settings.reduceMotion = false
+        #expect(viewModel.isPopoverConfettiActive(date: now) == true)
+
+        let futureISO = ISO8601DateFormatter().string(from: now.addingTimeInterval(3 * 86400))
+        let upcomingHTML = """
+        <html><body><script>var ytInitialPlayerResponse = {"videoDetails":{"isUpcoming":true,"isLiveContent":true,"title":"Birthday Countdown!","videoId":"v2"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"\(futureISO)"}}}};</script></body></html>
+        """
+        let upcomingMonitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: NotificationService(center: MockNotificationCenter()),
+            fetcher: { _ in (Data(upcomingHTML.utf8), okResponse) },
+            dateProvider: { now }
+        )
+        await upcomingMonitor.refreshAll()
+        let upcomingViewModel = MenuBarStatusViewModel(
+            channelStore: channelStore,
+            monitorService: upcomingMonitor,
+            dateProvider: { now }
+        )
+
+        let sections = upcomingViewModel.sections
+        #expect(upcomingViewModel.isPopoverConfettiActive(date: now) == false)
+        #expect(upcomingViewModel.isSectionCelebrating(sections.upcoming, date: now) == true)
+
+        let badge1 = NSHostingController(rootView: StatusBadge(isLive: true, isCelebration: true, reduceMotion: false))
+        let badge2 = NSHostingController(rootView: StatusBadge(isLive: false, label: "UPCOMING", isCelebration: true, reduceMotion: true))
+        let confetti = NSHostingController(rootView: ConfettiOverlayView())
+        let popover = NSHostingController(rootView: MenuBarStatusView(viewModel: viewModel))
+        _ = (badge1.view, badge2.view, confetti.view, popover.view)
+    }
 }

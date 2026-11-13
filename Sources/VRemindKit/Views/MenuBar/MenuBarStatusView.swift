@@ -191,6 +191,28 @@ public final class MenuBarStatusViewModel: ObservableObject {
             await monitorService.refreshAll()
         }
     }
+
+    public func isPopoverConfettiActive(date: Date = Date()) -> Bool {
+        guard !monitorService.preferencesStore.settings.reduceMotion else {
+            return false
+        }
+        return CelebrationDetector.shouldShowConfetti(
+            channels: channelStore.channels,
+            statuses: monitorService.statuses,
+            date: date,
+            calendar: calendar
+        )
+    }
+
+    public func isSectionCelebrating(_ channels: [WatchedChannel], date: Date = Date()) -> Bool {
+        channels.contains { channel in
+            CelebrationDetector.detect(
+                status: monitorService.status(for: channel),
+                channel: channel,
+                date: date
+            ).isCelebration
+        }
+    }
 }
 
 // MARK: - MenuBarStatusView
@@ -199,8 +221,14 @@ public struct MenuBarStatusView: View {
     @ObservedObject public var viewModel: MenuBarStatusViewModel
     @ObservedObject private var channelStore: ChannelStore
     @ObservedObject private var monitorService: StreamMonitorService
+    @ObservedObject private var preferencesStore: PreferencesStore
+    @State private var isPopoverVisible = false
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
+
+    public static func shouldFlashStatusButton(isAnyLive: Bool, reduceMotion: Bool) -> Bool {
+        isAnyLive && !reduceMotion
+    }
 
     public init(
         viewModel: MenuBarStatusViewModel,
@@ -210,19 +238,32 @@ public struct MenuBarStatusView: View {
         self.viewModel = viewModel
         self._channelStore = ObservedObject(wrappedValue: viewModel.channelStore)
         self._monitorService = ObservedObject(wrappedValue: viewModel.monitorService)
+        self._preferencesStore = ObservedObject(wrappedValue: viewModel.monitorService.preferencesStore)
         self.onOpenPreferences = onOpenPreferences
         self.onQuit = onQuit
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            headerView
-            Divider()
-            channelListView
-            Divider()
-            AddChannelBarView(viewModel: viewModel)
+        ZStack {
+            VStack(spacing: 0) {
+                headerView
+                Divider()
+                channelListView
+                Divider()
+                AddChannelBarView(viewModel: viewModel)
+            }
+
+            if isPopoverVisible && viewModel.isPopoverConfettiActive() {
+                ConfettiOverlayView()
+            }
         }
         .frame(width: 360, height: 440)
+        .onAppear {
+            isPopoverVisible = true
+        }
+        .onDisappear {
+            isPopoverVisible = false
+        }
     }
 
     private var headerView: some View {
@@ -337,11 +378,15 @@ public struct MenuBarStatusView: View {
         color: Color,
         channels: [WatchedChannel]
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let reduceMotion = preferencesStore.settings.reduceMotion
+        let isCelebrating = (title == "LIVE NOW" || title == "UPCOMING") && viewModel.isSectionCelebrating(channels)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(title)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(color)
+                    .rainbowForeground(active: isCelebrating, reduceMotion: reduceMotion)
 
                 Text("(\(count))")
                     .font(.system(size: 11))
@@ -356,6 +401,7 @@ public struct MenuBarStatusView: View {
                 ChannelRowView(
                     channel: channel,
                     status: viewModel.monitorService.status(for: channel),
+                    reduceMotion: reduceMotion,
                     onDelete: {
                         viewModel.removeChannel(id: channel.id)
                     }
