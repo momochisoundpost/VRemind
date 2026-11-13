@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3] - 2026-11-13
+
+### Release Notes
+**The Better Together Update** — *yes, we're a version number late to the Minecraft Bedrock 1.2 joke.*
+
+Missed opportunity on the version number aside, **1.3** is genuinely VRemind's **Better Together** release. In practice, that means two things: first, you don't just get live alerts for YouTube anymore — **Twitch** joins the watchlist right alongside it. Second, the entire backend got pulled apart so it isn't chained to macOS anymore. The Mac app stays 100% native SwiftUI and AppKit, while **`VRemindCore`** gives the business engine a life of its own anywhere Swift can run — your Windows PC, your Linux dev box, Googlebooks, or as a clean blueprint for KDE Plasma and GNOME ports.
+
+### Highlights & What's New
+
+#### 💜 Twitch Support (Still Zero API Keys)
+- **YouTube + Twitch in One Watchlist:** Track creators on both YouTube and Twitch as independent watchlist entries — even if the same VTuber streams on both.
+- **Platform Picker & Smart URL Detection:** Use the new platform dropdown on the left of the input bar to choose **YouTube** or **Twitch**, or just paste a `twitch.tv/...` or `youtube.com/@...` link and VRemind picks the right platform automatically.
+- **Avatar Platform Badges:** Channel avatars in the menu bar popover and macOS desktop widgets now wear a subtle bottom-right platform badge (red for YouTube, purple for Twitch) so you can tell where someone is live at a glance.
+- **Zero API Keys Required:** Checks Twitch live status, stream titles, start times, and avatars out of the box with no Twitch developer account or OAuth keys.
+
+#### 🧱 VRemindCore & The Backend Overhaul
+- **Decoupled Core (`VRemindCore`) + Mac Bridge (`VRemindKit`):** Extracted all domain models, stream providers, polling/deduplication logic, celebration detection, and persistence contracts into `VRemindCore` using only `Foundation` (and `FoundationNetworking` on non-Apple platforms) — zero `AppKit`, `SwiftUI`, `Combine`, `UserNotifications`, or `WidgetKit` imports.
+- **Built for More Platforms & Feeds:** Introduces `StreamProvider` and `StreamProviderRegistry` (`YouTubeStreamProvider`, `TwitchStreamProvider`), making it straightforward to plug in more platforms and feeds (like RSS) down the road, and to build native frontends beyond macOS. See [Sources/VRemindCore/README.md](Sources/VRemindCore/README.md) for the portable engine docs and TDD guide.
+
+#### 🔄 Seamless v1.2 Migration & Widget Isolation
+- **Automatic Watchlist & Widget Upgrade:** Existing v1.2 `UserDefaults` watchlists and `widget-cache.json` entries automatically migrate as YouTube channels without losing notification history, timestamps, or cached avatars.
+- **Per-Platform Avatar Caching:** Widget avatars are now scoped by platform (`youtube_...`, `twitch_...`) so creators with matching handles across platforms never overwrite each other.
+
+---
+
 ## [1.2] - 2026-11-12
 
 ### Release Notes

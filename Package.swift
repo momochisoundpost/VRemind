@@ -12,7 +12,8 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "VRemindCore"
+            name: "VRemindCore",
+            exclude: ["README.md"]
         ),
         .target(
             name: "VRemindKit",
