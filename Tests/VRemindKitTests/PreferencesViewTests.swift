@@ -329,4 +329,126 @@ struct PreferencesViewTests {
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.bounds.width >= 0)
     }
+
+    @Test @MainActor func testExportBackupWritesValidJSONFile() throws {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        prefs.settings.notifyOnUpcoming = true
+        store.addChannel(handle: "@test_vtuber")
+
+        let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vremind-export-test-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        viewModel.exportBackup(chooseSaveURL: { tempURL })
+
+        let data = try Data(contentsOf: tempURL)
+        let decoded = try BackupPayload.decodeAndValidate(from: data)
+        #expect(decoded.settings.notifyOnUpcoming == true)
+        #expect(decoded.channels.contains { $0.handle == "@test_vtuber" })
+        #expect(viewModel.backupStatusText != nil)
+        #expect(viewModel.backupErrorMessage == nil)
+    }
+
+    @Test @MainActor func testRestoreBackupOverwritesStoresSanitizesAndTriggersCallback() async throws {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        try store.saveChannels([
+            WatchedChannel(id: "youtube:@bukancaitlyn", platform: .youtube, name: "Caitlyn", handle: "@bukancaitlyn"),
+            WatchedChannel(id: "youtube:@other", platform: .youtube, name: "Other", handle: "@other")
+        ])
+        await Task.yield()
+
+        var backupSettings = AppSettings()
+        backupSettings.hasCompletedOnboarding = false
+        backupSettings.notifyOnUpcoming = true
+        backupSettings.reduceMotion = true
+        var twitchChannel = WatchedChannel(id: "twitch:ironmouse", platform: .twitch, name: "ironmouse", handle: "ironmouse")
+        twitchChannel.lastNotifiedVideoId = "old123"
+        let payload = BackupPayload(settings: backupSettings, channels: [twitchChannel])
+        let backupData = try payload.encodedJSONData()
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vremind-restore-test-\(UUID().uuidString).json")
+        try backupData.write(to: tempURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        var callbackFired = false
+        let viewModel = PreferencesViewModel(
+            preferencesStore: prefs,
+            channelStore: store,
+            onRestore: { callbackFired = true }
+        )
+
+        viewModel.restoreBackup(chooseOpenURL: { tempURL })
+        #expect(viewModel.isShowingRestoreConfirmation == true)
+        #expect(viewModel.pendingRestorePayload != nil)
+        #expect(store.channels.count == 2)
+        #expect(callbackFired == false)
+
+        viewModel.confirmRestore()
+        await Task.yield()
+        #expect(viewModel.isShowingRestoreConfirmation == false)
+        #expect(viewModel.pendingRestorePayload == nil)
+        #expect(callbackFired == true)
+        #expect(store.channels.count == 1)
+        #expect(store.channels.first?.id == "twitch:ironmouse")
+        #expect(store.channels.first?.lastNotifiedVideoId == nil)
+        #expect(prefs.settings.hasCompletedOnboarding == true)
+        #expect(prefs.settings.notifyOnUpcoming == true)
+        #expect(prefs.settings.reduceMotion == true)
+        #expect(viewModel.backupStatusText != nil)
+        #expect(viewModel.backupErrorMessage == nil)
+    }
+
+    @Test @MainActor func testRestoreInvalidFileSurfacesErrorWithoutMutatingStores() async throws {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        try store.saveChannels([
+            WatchedChannel(id: "youtube:@existing", platform: .youtube, name: "Existing", handle: "@existing")
+        ])
+        await Task.yield()
+        prefs.settings.notifyOnUpcoming = false
+
+        let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
+        viewModel.prepareRestore(from: Data("not json".utf8))
+
+        #expect(viewModel.backupErrorMessage != nil)
+        #expect(viewModel.isShowingRestoreConfirmation == false)
+        #expect(viewModel.pendingRestorePayload == nil)
+        #expect(store.channels.count == 1)
+        #expect(store.channels.first?.handle == "@existing")
+        #expect(prefs.settings.notifyOnUpcoming == false)
+    }
+
+    @Test @MainActor func testCancelRestoreClearsPendingPayloadWithoutMutatingStores() async throws {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        try store.saveChannels([
+            WatchedChannel(id: "youtube:@existing", platform: .youtube, name: "Existing", handle: "@existing")
+        ])
+        await Task.yield()
+
+        let payload = BackupPayload(
+            settings: AppSettings(),
+            channels: [WatchedChannel(id: "twitch:ironmouse", platform: .twitch, name: "ironmouse", handle: "ironmouse")]
+        )
+        let validData = try payload.encodedJSONData()
+
+        let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
+        viewModel.prepareRestore(from: validData)
+        #expect(viewModel.isShowingRestoreConfirmation == true)
+        #expect(viewModel.pendingRestorePayload != nil)
+
+        viewModel.cancelRestore()
+        #expect(viewModel.isShowingRestoreConfirmation == false)
+        #expect(viewModel.pendingRestorePayload == nil)
+        #expect(store.channels.count == 1)
+        #expect(store.channels.first?.handle == "@existing")
+    }
 }
