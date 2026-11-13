@@ -39,7 +39,27 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
     - `🗓️ UPCOMING`: Shows scheduled waiting rooms and stream start times (e.g., `in 45m`).
     - `Offline`: Displays time elapsed since the channel last streamed.
   - **Smart Concurrency & Power Management**: Concurrency is bounded to a maximum of 3 concurrent network requests to prevent rate limiting. Background polling automatically pauses when displays go to sleep and resumes immediately upon display wake.
-  - **Dynamic Menu Bar Icon**: The menu bar icon changes dynamically (`dot.radiowaves.left.and.right` in vibrant green when any watched channel is live, or a subtle `bell` when all channels are offline).
+  - **Solid Menu Bar Icon**: Displays a subtle `antenna.radiowaves.left.and.right` icon when all channels are offline and switches to a steady, non-distracting red (`systemRed`) when any watched channel is live.
+
+- **Native macOS Desktop Widgets (`WidgetKit`)**:
+  - **Small Hero (`systemSmall`)**: Edge-to-edge creator avatar backdrop with adaptive desktop contrast (`@Environment(\.widgetRenderingMode)`) on macOS Sonoma and newer.
+  - **Medium Watchlist (`systemMedium`)**: Quick-grid status view with side-by-side stream titles and countdown timers.
+  - **Large Dashboard (`systemLarge`)**: Featured live hero card alongside a full multi-channel watchlist overview.
+  - **One-Click Deep Linking (`vremind://open-stream`)**: Tapping any widget launches the stream directly in your default browser.
+  - **Zero-Xcode App Extension**: Reverse-engineered `_NSExtensionMain` WidgetKit bundle built exclusively with Xcode Command Line Tools.
+
+- **Celebration Mode (Multilingual Milestone Detection)**:
+  - Automatically scans scraped YouTube stream titles for birthday, debut, re-debut, and anniversary milestones in **English**, **Indonesian**, and **Japanese**.
+  - Shifts celebrating **LIVE NOW** and **UPCOMING** badges, section headers, and stream timers into an animated rainbow gradient.
+  - **Non-Metal Popover Confetti**: Rains party confetti inside the menu bar popover when a milestone stream is live or airing today, drawn via pure CPU-rasterized SwiftUI `Canvas` and `TimelineView` with zero idle CPU usage when closed.
+
+- **Built-in Software Updater (`MarkdownView`)**:
+  - Periodic and manual update checks against GitHub Releases with opt-in consent and "Skip This Version".
+  - Native macOS 12-compatible Markdown renderer in the **Software Update Available** dialog supporting headings, bullet lists, code blocks, inline formatting, and embedded GitHub Release screenshots.
+
+- **Menu Bar Polish**:
+  - Tactile pointing hand cursor (`NSCursor.pointingHand`) and full `@handle` tooltips on channel rows.
+  - Ready for macOS 27 Golden Gate liquid glass and vibrancy styling.
 
 - **Native macOS Desktop Notifications**:
   - Powered by Apple's `UserNotifications` framework (`UNUserNotificationCenter`).
@@ -55,13 +75,15 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
 - **Preferences Window (`⌘,`)**:
   - **General Tab**:
     - **Launch at Login**: Integrates with modern `SMAppService` on macOS 13+ (Ventura and newer) with an automatic fallback to Monterey-compatible AppleScript login item management on macOS 12.
+    - **Reduce Motion**: Disables popover confetti rain and slows rainbow gradients to a calm, gentle shift.
+    - **Updates**: Opt-in automatic update checks, current version display, and manual **Check for Updates Now** button.
     - **Factory Reset**: Restores channels and settings to their initial default state with double-confirmation protection.
   - **Notifications Tab**:
     - Granular controls for Live alerts, Upcoming stream reminders, and notification sounds.
     - Live system authorization status badge with one-click access to macOS System Settings.
   - **About Tab**:
     - Backstory and open-source philosophy: *"You don't like what I did? Go fork yourself, it's free and open source."*
-    - Quick links to Caitlyn Momochi's [YouTube](https://www.youtube.com/@bukancaitlyn), [X / Twitter](https://x.com/Y2Karyl), and [GitHub](https://github.com/momochisoundpost).
+    - Quick links to Caitlyn Momochi's [YouTube](https://www.youtube.com/@bukancaitlyn), [X / Twitter](https://x.com/Y2Karyl), [GitHub](https://github.com/momochisoundpost), and [Instagram](https://www.instagram.com/bukancaitlyn).
 
 ---
 
@@ -77,10 +99,15 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
 > **macOS Gatekeeper Warning**: Because VRemind is an independent open-source project and ad-hoc code-signed without an Apple Developer ID certificate, macOS may say:
 > *"VRemind.app is damaged and can’t be opened."* or *"cannot be opened because the developer cannot be verified."*
 >
-> To open it, either **Right-Click (Control-Click) `VRemind.app` → Open → Open**, or clear the quarantine flag via Terminal:
-> ```bash
-> xattr -cr /Applications/VRemind.app
-> ```
+> - **macOS 15 Sequoia and newer**:
+>   1. Try opening `VRemind.app` once and click **Done** (or **OK**) on the Gatekeeper dialog.
+>   2. Open **System Settings → Privacy & Security**.
+>   3. Scroll down to the **Security** section where `"VRemind.app" was blocked` appears, click **Open Anyway**, and authenticate with Touch ID / your password.
+> - **macOS 12 Monterey – macOS 14 Sonoma**: **Right-Click (Control-Click) `VRemind.app` → Open → Open**.
+> - **Any macOS version (Terminal)**: Clear the quarantine flag directly:
+>   ```bash
+>   xattr -cr /Applications/VRemind.app
+>   ```
 
 ### Option 2: Build from Source
 
@@ -102,7 +129,7 @@ open build/VRemind.app
 
 ## Quick Start & Usage
 
-1. **Menu Bar Status**: Look for the bell icon in your macOS menu bar. If any watched channel goes live, it turns into a vibrant red signal beacon (`dot.radiowaves.left.and.right`).
+1. **Menu Bar Status**: Look for the antenna icon (`antenna.radiowaves.left.and.right`) in your macOS menu bar. If any watched channel goes live, it turns solid red.
 2. **Add a Creator**: Click the menu bar icon to open the popover. Type any YouTube creator's handle in the bottom input bar (e.g. `@filian`, `@ironmouse`, `@bukancaitlyn`) and press Return or click `+`.
 3. **Watch a Stream**: Click on any channel row or notification alert to open the stream directly in your default browser.
 4. **Remove a Channel**: Hover over a channel row and click the trash can icon.
@@ -123,11 +150,14 @@ Because I love the glowing Apple logo MacBook users! My very first long-form vid
 **No.** VRemind requires zero API keys, no Google Cloud developer projects, and no auth credentials. It extracts stream statuses, video IDs, start times, and avatar URLs directly from publicly accessible YouTube `/live` pages.
 
 ### Why does macOS say the app is "damaged" or from an "unverified developer"?
-Apple requires developers to pay $99/year for an Apple Developer ID certificate to notarize software. Because this is a free, indie hobby project, the binary is ad-hoc code-signed. You can bypass this in one second by running:
-```bash
-xattr -cr /Applications/VRemind.app
-```
-or by Right-Clicking `VRemind.app` → **Open** → **Open**. You can also inspect the full source code and build it locally in seconds with `bash scripts/build-app.sh`.
+Apple requires developers to pay $99/year for an Apple Developer ID certificate to notarize software. Because this is a free, indie hobby project, the binary is ad-hoc code-signed. You can bypass this in seconds:
+- **macOS 15 Sequoia and newer**: Attempt to open `VRemind.app` once, click **Done**, then open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**.
+- **macOS 12 – 14**: Right-Click `VRemind.app` → **Open** → **Open**.
+- **Terminal**:
+  ```bash
+  xattr -cr /Applications/VRemind.app
+  ```
+You can also inspect the full source code and build it locally in seconds with `bash scripts/build-app.sh`.
 
 ### Does this drain my MacBook battery or hog CPU in the background?
 **Not at all.** VRemind is engineered specifically for power efficiency on macOS:
@@ -142,39 +172,47 @@ or by Right-Clicking `VRemind.app` → **Open** → **Open**. You can also inspe
 **Yes.** Caitlyn Momochi is just the default starter channel so the list isn't blank on first launch. Hover over the channel row, click the trash can icon, and add whoever you like.
 
 ### What if YouTube changes its page layout and streams stop updating?
-Because VRemind parses YouTube's public web HTML, major layout updates on YouTube's side can occasionally affect regex patterns. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request. The parser is completely modular and backed by 100+ automated unit tests.
+Because VRemind parses YouTube's public web HTML, major layout updates on YouTube's side can occasionally affect regex patterns. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request. The parser is completely modular and backed by 184 automated unit tests.
 
 ---
 
 ## Architecture Overview
 
-VRemind is structured into a reusable core library target and a lightweight executable target:
+VRemind is structured into a reusable core library target, a lightweight menu bar executable target, and a native WidgetKit extension target:
 
 ```text
 VRemind/
 ├── Sources/
 │   ├── VRemindKit/               # Core framework library
-│   │   ├── Models/               # WatchedChannel, StreamStatus, AppSettings, ElapsedTime
-│   │   ├── Services/             # StreamMonitorService, NotificationService, ChannelStore, PreferencesStore, LivePageParser
-│   │   ├── Utilities/            # LinkOpener, LaunchAtLoginHelper, SecretCheck
-│   │   ├── Views/                # SwiftUI views (MenuBar, Preferences, Onboarding, Components, Theme)
+│   │   ├── Models/               # WatchedChannel, StreamStatus, AppSettings, GitHubRelease, WidgetSnapshot, VRemindWidgetEntry, ElapsedTime
+│   │   ├── Services/             # StreamMonitorService, NotificationService, ChannelStore, PreferencesStore, LivePageParser, CelebrationDetector, UpdateService, WidgetSnapshotStore, VRemindTimelineProvider
+│   │   ├── Utilities/            # LinkOpener, LaunchAtLoginHelper, SecretCheck, SemanticVersion, BrandIcon
+│   │   ├── Views/                # SwiftUI views (MenuBar, Preferences, Onboarding, Updates, Widget, Components, Theme)
 │   │   └── AppConstants.swift    # Global constants
-│   └── VRemind/                  # Application executable
-│       ├── AppDelegate.swift     # NSApplicationDelegate, NSStatusItem, NSPopover, Sleep/Wake
-│       ├── PreferencesWindowController.swift
-│       ├── OnboardingWindowController.swift
-│       └── main.swift
+│   ├── VRemind/                  # Application executable
+│   │   ├── AppDelegate.swift     # NSApplicationDelegate, NSStatusItem, NSPopover, Sleep/Wake, Deep Links
+│   │   ├── PreferencesWindowController.swift
+│   │   ├── OnboardingWindowController.swift
+│   │   ├── UpdateAvailableWindowController.swift
+│   │   └── main.swift
+│   └── VRemindWidget/            # Native macOS WidgetKit extension (_NSExtensionMain)
+│       ├── VRemindWidget.swift
+│       ├── VRemindTimelineProvider.swift
+│       └── Views/                # SmallHeroWidgetView, MediumWatchlistWidgetView, LargeDashboardWidgetView
 ├── Tests/
-│   └── VRemindKitTests/          # Swift Testing suite (100+ comprehensive unit and view tests)
+│   └── VRemindKitTests/          # Swift Testing suite (184 unit and view tests across 21 suites)
 ├── Resources/
-│   └── Info.plist                # App bundle metadata (LSUIElement = true for menu bar only)
+│   ├── Info.plist                # App bundle metadata (LSUIElement = true for menu bar only)
+│   ├── Widget-Info.plist         # WidgetKit extension metadata
+│   └── Widget.entitlements
 └── scripts/
     ├── test.sh                   # Test runner script (supports Xcode CLT)
-    └── build-app.sh              # Universal binary build and release packager
+    └── build-app.sh              # Universal binary & WidgetKit extension packager
 ```
 
-- **`VRemindKit`**: Contains all business logic, HTML scraping, notification management, persistence, and SwiftUI UI components. Decoupled from application lifecycle to allow thorough automated testing.
-- **`VRemind`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, and window controllers for Preferences and Onboarding. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
+- **`VRemindKit`**: Contains all business logic, HTML scraping, celebration detection, update checking, Markdown rendering, notification management, persistence, and SwiftUI UI components. Decoupled from application lifecycle to allow thorough automated testing.
+- **`VRemind`**: Minimal AppKit executable that coordinates the `NSStatusItem`, popover presentation, display sleep/wake notifications, deep links, and window controllers for Preferences, Onboarding, and Software Updates. Sets `LSUIElement = true` so the app runs unobtrusively in the menu bar without cluttering the macOS Dock.
+- **`VRemindWidget`**: Native WidgetKit extension embedded inside `Contents/PlugIns/VRemindWidget.appex`, built without Xcode using `-Xlinker -e -Xlinker _NSExtensionMain`.
 
 ---
 
@@ -187,7 +225,7 @@ VRemind/
 
 ## Running Tests
 
-Run the automated test suite (100+ tests) using Apple's modern Swift Testing framework:
+Run the automated test suite (184 tests across 21 suites) using Apple's modern Swift Testing framework:
 
 ```bash
 bash scripts/test.sh
@@ -231,5 +269,5 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
   <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift" alt="Swift: 5.9+"></a>
   <img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen" alt="Dependencies: Zero">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT"></a>
-  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-104%20Passing-success" alt="Tests: 104 Passing"></a>
+  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-184%20Passing-success" alt="Tests: 184 Passing"></a>
 </p>
