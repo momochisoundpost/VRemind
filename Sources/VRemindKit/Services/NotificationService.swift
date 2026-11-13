@@ -76,6 +76,7 @@ public final class NoOpNotificationCenter: NotificationCenterProtocol {
 public final class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     public static let updateCategoryIdentifier = "VREMIND_UPDATE_AVAILABLE"
     public static let updateNotificationCategory = "VREMIND_UPDATE_AVAILABLE"
+    public static let devBirthdayEmailURL = URL(string: "mailto:y2karyl@disroot.org?subject=Happy%20Birthday%20Caitlyn!")!
 
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     public private(set) var liveNotificationCount: Int = 0
@@ -180,6 +181,25 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         }
     }
 
+    public func notifyDeveloperBirthday(year: Int, playSound: Bool) async {
+        let content = UNMutableNotificationContent()
+        content.title = "🎉 Happy Birthday to the Developer!"
+        content.body = "Today is Caitlyn Momochi's birthday! Click to send a birthday wish."
+        content.userInfo = [
+            "mailtoURL": Self.devBirthdayEmailURL.absoluteString
+        ]
+        content.sound = playSound ? .default : nil
+
+        let identifier = "dev-birthday-\(year)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        do {
+            try await center.add(request)
+        } catch {
+            // Silently handle error or log
+        }
+    }
+
     public func handleNotificationClick(userInfo: [AnyHashable: Any]) {
         if let isUpdate = userInfo["isUpdateNotification"] as? Bool, isUpdate {
             let release = Self.decodeRelease(from: userInfo)
@@ -188,6 +208,13 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         } else if userInfo["isUpdateNotification"] != nil {
             let release = Self.decodeRelease(from: userInfo)
             onUpdateClicked?(release)
+            return
+        }
+
+        if let mailtoString = userInfo["mailtoURL"] as? String,
+           let mailtoURL = URL(string: mailtoString),
+           mailtoURL.scheme == "mailto" {
+            urlOpener(mailtoURL)
             return
         }
 

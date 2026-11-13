@@ -252,4 +252,37 @@ struct NotificationServiceTests {
         #expect(callbackInvoked == true)
         #expect(clickedRelease?.tagName == "v1.0.4")
     }
+
+    @Test @MainActor func testNotifyDeveloperBirthdayPayloadAndClick() async throws {
+        var openedURL: URL?
+        let mockCenter = MockNotificationCenter()
+        let service = NotificationService(
+            center: mockCenter,
+            urlOpener: { openedURL = $0 }
+        )
+
+        await service.notifyDeveloperBirthday(year: 2026, playSound: true)
+
+        #expect(mockCenter.requests.count == 1)
+        let request = try #require(mockCenter.requests.first)
+        #expect(request.identifier == "dev-birthday-2026")
+        #expect(request.content.title == "🎉 Happy Birthday to the Developer!")
+        #expect(request.content.body.contains("Caitlyn Momochi"))
+        #expect(request.content.sound == .default)
+        #expect(request.content.userInfo["mailtoURL"] as? String == "mailto:y2karyl@disroot.org?subject=Happy%20Birthday%20Caitlyn!")
+
+        service.handleNotificationClick(userInfo: request.content.userInfo)
+        #expect(openedURL?.absoluteString == "mailto:y2karyl@disroot.org?subject=Happy%20Birthday%20Caitlyn!")
+    }
+
+    @Test @MainActor func testNotifyDeveloperBirthdaySilent() async throws {
+        let mockCenter = MockNotificationCenter()
+        let service = NotificationService(center: mockCenter)
+
+        await service.notifyDeveloperBirthday(year: 2026, playSound: false)
+
+        #expect(mockCenter.requests.count == 1)
+        let request = try #require(mockCenter.requests.first)
+        #expect(request.content.sound == nil)
+    }
 }
