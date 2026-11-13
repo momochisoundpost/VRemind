@@ -15,7 +15,7 @@
 A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero third-party dependencies.
 
 > [!NOTE]
-> **Maintenance Mode:** With [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore) and `VRemind` now cleanly separated, **VRemind is entering maintenance mode** — no new features are planned unless someone contributes one via PR or manages to scrape **Kick.com** without API keys.
+> **Maintenance Mode:** With [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore) and `VRemind` now cleanly separated, **VRemind is entering maintenance mode** — future updates will focus on syncing `VRemindCore` and fixing upstream breakage (mostly because YouTube keeps changing things to keep their product managers employed). No new features are planned unless someone contributes one via PR or manages to scrape **Kick.com** without API keys.
 
 ---
 
