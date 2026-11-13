@@ -92,7 +92,7 @@ public struct LargeDashboardWidgetView: View {
             Text("No channels monitored")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.primary)
-            Text("Add YouTube channels in the menu bar popover.")
+            Text("Add YouTube or Twitch channels in the menu bar popover.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
             Spacer()
@@ -183,34 +183,53 @@ public struct LargeDashboardWidgetView: View {
 
     @ViewBuilder
     private func heroAvatar(for channel: WidgetChannelItem) -> some View {
-        if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 48, height: 48)
-                .clipShape(Circle())
-        } else {
-            WidgetMonogramView(
-                displayName: channel.displayName,
-                size: 48,
-                isDimmed: channel.statusKind != .live
-            )
+        Group {
+            if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 48, height: 48)
+                    .clipShape(Circle())
+            } else {
+                WidgetMonogramView(
+                    displayName: channel.displayName,
+                    size: 48,
+                    isDimmed: channel.statusKind != .live
+                )
+            }
         }
+        .frame(width: 48, height: 48)
+        .overlay(
+            PlatformBadgeView(platform: channel.platform, size: 12),
+            alignment: .bottomTrailing
+        )
+    }
+
+    @ViewBuilder
+    private func watchlistAvatar(for channel: WidgetChannelItem) -> some View {
+        Group {
+            if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 24, height: 24)
+                    .clipShape(Circle())
+            } else {
+                WidgetMonogramView(displayName: channel.displayName, size: 24, isDimmed: channel.statusKind != .live)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .overlay(
+            PlatformBadgeView(platform: channel.platform, size: 8),
+            alignment: .bottomTrailing
+        )
     }
 
     @ViewBuilder
     private func watchlistRow(for channel: WidgetChannelItem) -> some View {
         Link(destination: channel.deepLinkURL ?? channel.channelURL) {
             HStack(spacing: 8) {
-                if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 24, height: 24)
-                        .clipShape(Circle())
-                } else {
-                    WidgetMonogramView(displayName: channel.displayName, size: 24, isDimmed: channel.statusKind != .live)
-                }
+                watchlistAvatar(for: channel)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(channel.displayName)

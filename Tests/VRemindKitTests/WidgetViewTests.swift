@@ -217,7 +217,52 @@ struct WidgetViewTests {
         #expect(fallback.snapshot.channels.first?.handle == AppConstants.channelHandle)
     }
 
-    // MARK: - Test 8: SmallHeroWidgetView Monochrome Contrast Adaptation (1.1 Polish)
+    // MARK: - Test 8: Twitch Rendering Across Widget Views
+
+    @Test func twitchItemRendersInAllWidgetViewsWithTwitchDeepLink() {
+        let twitchItem = WidgetChannelItem(
+            platform: .twitch,
+            handle: "ironmouse",
+            displayName: "Ironmouse",
+            statusKind: .live,
+            streamTitle: "Big Twitch Collab!",
+            videoId: "999",
+            liveStartedAt: Date().addingTimeInterval(-1800)
+        )
+
+        let smallView = SmallHeroWidgetView(channel: twitchItem)
+        #expect(smallView.deepLinkURL == URL(string: "vremind://open-stream?url=https://www.twitch.tv/ironmouse"))
+        _ = smallView.body
+
+        let mediumView = MediumWatchlistWidgetView(channels: [twitchItem])
+        #expect(mediumView.displayedChannels.first?.deepLinkURL == URL(string: "vremind://open-stream?url=https://www.twitch.tv/ironmouse"))
+        _ = mediumView.body
+
+        let largeView = LargeDashboardWidgetView(channels: [twitchItem])
+        #expect(largeView.heroChannel?.deepLinkURL == URL(string: "vremind://open-stream?url=https://www.twitch.tv/ironmouse"))
+        _ = largeView.body
+    }
+
+    // MARK: - Test 9: Platform Colors & PlatformBadgeView
+
+    @Test func themePlatformColors() {
+        #expect(Theme.platformColor(for: .youtube) == Color.red)
+        #expect(Theme.platformColor(for: .twitch) == Color(red: 0.569, green: 0.275, blue: 1.0))
+    }
+
+    @Test func platformBadgeViewRenders() {
+        let ytBadge = PlatformBadgeView(platform: .youtube)
+        #expect(ytBadge.platform == .youtube)
+        #expect(ytBadge.size == 10)
+        _ = ytBadge.body
+
+        let twitchBadge = PlatformBadgeView(platform: .twitch, size: 8)
+        #expect(twitchBadge.platform == .twitch)
+        #expect(twitchBadge.size == 8)
+        _ = twitchBadge.body
+    }
+
+    // MARK: - Test 10: SmallHeroWidgetView Monochrome Contrast Adaptation (1.1 Polish)
 
     @Test func smallHeroWidgetViewMonochromeContrastAdaptsToBlack() {
         let channel = WidgetChannelItem(

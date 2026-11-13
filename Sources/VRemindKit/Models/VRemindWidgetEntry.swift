@@ -34,9 +34,10 @@ public struct VRemindWidgetEntry: Sendable, Equatable {
     /// Default fallback entry when no snapshot is available on disk.
     public static var fallback: VRemindWidgetEntry {
         let starter = WidgetChannelItem(
+            platform: .youtube,
             handle: AppConstants.channelHandle,
             displayName: "Caitlyn Momochi",
-            avatarFilename: "bukancaitlyn.jpg",
+            avatarFilename: "youtube_bukancaitlyn.jpg",
             avatarURL: nil,
             statusKind: .offline,
             streamTitle: nil,
@@ -55,9 +56,10 @@ public struct VRemindWidgetEntry: Sendable, Equatable {
     /// Sample entry used for widget previews and placeholders.
     public static var previewSample: VRemindWidgetEntry {
         let starter = WidgetChannelItem(
+            platform: .youtube,
             handle: AppConstants.channelHandle,
             displayName: "Caitlyn Momochi",
-            avatarFilename: "bukancaitlyn.jpg",
+            avatarFilename: "youtube_bukancaitlyn.jpg",
             avatarURL: nil,
             statusKind: .live,
             streamTitle: "Chill Piano Practice 🎹",

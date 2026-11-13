@@ -109,7 +109,7 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
                 ?? statuses[channel.handle.lowercased()]
                 ?? .unknown
 
-            let candidateFilename = Self.avatarFilename(for: channel.handle)
+            let candidateFilename = Self.avatarFilename(for: channel.handle, platform: channel.platform)
             let avatarDestinationURL = avatarsDirectoryURL.appendingPathComponent(candidateFilename, isDirectory: false)
 
             var avatarFilename: String? = nil
@@ -179,7 +179,7 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
 
     // MARK: - Domain Mapping & Sorting
 
-    public static func avatarFilename(for handle: String) -> String {
+    public static func avatarFilename(for handle: String, platform: StreamPlatform = .youtube) -> String {
         var cleaned = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("@") {
             cleaned.removeFirst()
@@ -187,7 +187,8 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
         let safe = cleaned
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
-        return safe.isEmpty ? "avatar.jpg" : "\(safe).jpg"
+        let baseName = safe.isEmpty ? "avatar" : safe
+        return "\(platform.rawValue)_\(baseName).jpg"
     }
 
     public static func makeChannelItem(
@@ -237,6 +238,7 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
         }
 
         return WidgetChannelItem(
+            platform: channel.platform,
             handle: channel.handle,
             displayName: channel.name,
             avatarFilename: avatarFilename,

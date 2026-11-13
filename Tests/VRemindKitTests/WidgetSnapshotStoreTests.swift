@@ -210,17 +210,68 @@ struct WidgetSnapshotStoreTests {
             statuses: [channel.id: StreamStatus.offline(lastStreamedAt: nil)]
         )
 
-        let cachedAvatarFile = tempDir.appendingPathComponent("Avatars/bukancaitlyn.jpg")
+        let cachedAvatarFile = tempDir.appendingPathComponent("Avatars/youtube_bukancaitlyn.jpg")
         #expect(FileManager.default.fileExists(atPath: cachedAvatarFile.path))
 
         let readData = try Data(contentsOf: cachedAvatarFile)
         #expect(readData == dummyImageData)
 
         let snapshot = store.readSnapshot()
-        #expect(snapshot?.channels.first?.avatarFilename == "bukancaitlyn.jpg")
+        #expect(snapshot?.channels.first?.avatarFilename == "youtube_bukancaitlyn.jpg")
     }
 
-    // MARK: - Test 6: Container Path Resolution
+    // MARK: - Test 6: Cross-Platform Avatar Filename Isolation
+
+    @Test func avatarFilenamePlatformIsolation() {
+        let ytFilename = WidgetSnapshotStore.avatarFilename(for: "@ironmouse", platform: .youtube)
+        let twitchFilename = WidgetSnapshotStore.avatarFilename(for: "ironmouse", platform: .twitch)
+        #expect(ytFilename == "youtube_ironmouse.jpg")
+        #expect(twitchFilename == "twitch_ironmouse.jpg")
+        #expect(ytFilename != twitchFilename)
+    }
+
+    @Test func writeSnapshotWithCrossPlatformChannelsStoresDistinctItemsAndAvatars() async throws {
+        let tempDir = try createTemporaryDirectory()
+        defer { removeTemporaryDirectory(tempDir) }
+
+        let store = WidgetSnapshotStore(directoryURL: tempDir)
+
+        let ytChannel = WatchedChannel(
+            id: "youtube:@ironmouse",
+            platform: .youtube,
+            name: "Ironmouse YT",
+            handle: "@ironmouse"
+        )
+        let twitchChannel = WatchedChannel(
+            id: "twitch:ironmouse",
+            platform: .twitch,
+            name: "Ironmouse Twitch",
+            handle: "ironmouse"
+        )
+
+        let liveDate = Date(timeIntervalSince1970: 1731401000)
+        let statuses: [String: StreamStatus] = [
+            ytChannel.id: .live(videoId: "yt123", title: "YT Stream", startedAt: liveDate),
+            twitchChannel.id: .live(videoId: "999", title: "Twitch Stream", startedAt: liveDate)
+        ]
+
+        try await store.writeSnapshot(channels: [ytChannel, twitchChannel], statuses: statuses)
+
+        let snapshot = try #require(store.readSnapshot())
+        #expect(snapshot.channels.count == 2)
+        let ids = snapshot.channels.map(\.id)
+        #expect(ids.contains("youtube:@ironmouse"))
+        #expect(ids.contains("twitch:ironmouse"))
+
+        let ytItem = try #require(snapshot.channels.first(where: { $0.platform == .youtube }))
+        let twitchItem = try #require(snapshot.channels.first(where: { $0.platform == .twitch }))
+
+        #expect(ytItem.id != twitchItem.id)
+        #expect(WidgetSnapshotStore.avatarFilename(for: ytItem.handle, platform: ytItem.platform) !=
+                WidgetSnapshotStore.avatarFilename(for: twitchItem.handle, platform: twitchItem.platform))
+    }
+
+    // MARK: - Test 7: Container Path Resolution
 
     @Test func resolveDefaultDirectoryURLForHostAndWidgetExtension() {
         // Unsandboxed host app resolution

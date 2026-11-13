@@ -92,7 +92,69 @@ struct WidgetSnapshotTests {
             handle: "@bukancaitlyn",
             displayName: "Caitlyn Momochi"
         )
-        #expect(item.id == "@bukancaitlyn")
+        #expect(item.id == "youtube:@bukancaitlyn")
+    }
+
+    @Test func legacy12WidgetChannelItemJSONDecodesWithYouTubePlatformAndId() throws {
+        let legacyJSON = """
+        {
+            "handle": "@bukancaitlyn",
+            "displayName": "Caitlyn Momochi",
+            "avatarFilename": "bukancaitlyn.jpg",
+            "statusKind": "live",
+            "streamTitle": "Live Sing Along",
+            "videoId": "vid123"
+        }
+        """
+        let data = try #require(legacyJSON.data(using: .utf8))
+        let item = try JSONDecoder().decode(WidgetChannelItem.self, from: data)
+        #expect(item.platform == .youtube)
+        #expect(item.id == "youtube:@bukancaitlyn")
+        #expect(item.handle == "@bukancaitlyn")
+        #expect(item.displayName == "Caitlyn Momochi")
+        #expect(item.statusKind == .live)
+        #expect(item.videoId == "vid123")
+    }
+
+    @Test func twitchWidgetChannelItemURLsAndDeepLink() throws {
+        let item = WidgetChannelItem(
+            platform: .twitch,
+            handle: "ironmouse",
+            displayName: "Ironmouse",
+            statusKind: .live,
+            streamTitle: "Chatting and Gaming",
+            videoId: "999"
+        )
+        #expect(item.platform == .twitch)
+        #expect(item.channelURL == URL(string: "https://www.twitch.tv/ironmouse"))
+        #expect(item.streamURL == URL(string: "https://www.twitch.tv/ironmouse"))
+        #expect(item.videoURL == nil)
+        let deepLink = try #require(item.deepLinkURL)
+        #expect(deepLink.absoluteString == "vremind://open-stream?url=https://www.twitch.tv/ironmouse")
+    }
+
+    @Test func sameHandleOnYouTubeAndTwitchProducesDistinctId() {
+        let ytItem = WidgetChannelItem(
+            platform: .youtube,
+            handle: "@ironmouse",
+            displayName: "Ironmouse YT"
+        )
+        let twitchItem = WidgetChannelItem(
+            platform: .twitch,
+            handle: "ironmouse",
+            displayName: "Ironmouse Twitch"
+        )
+        #expect(ytItem.id == "youtube:@ironmouse")
+        #expect(twitchItem.id == "twitch:ironmouse")
+        #expect(ytItem.id != twitchItem.id)
+
+        let twitchItemSameHandle = WidgetChannelItem(
+            platform: .twitch,
+            handle: "@ironmouse",
+            displayName: "Ironmouse Twitch"
+        )
+        #expect(twitchItemSameHandle.id == "twitch:@ironmouse")
+        #expect(ytItem.id != twitchItemSameHandle.id)
     }
 
     @Test func statusKindRawValues() {

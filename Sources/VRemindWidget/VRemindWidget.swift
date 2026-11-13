@@ -37,7 +37,7 @@ public struct VRemindWidget: Widget {
             VRemindWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("VRemind")
-        .description("Track your favorite VTubers and streamers live on YouTube.")
+        .description("Track your favorite VTubers and streamers live on YouTube and Twitch.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

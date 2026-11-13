@@ -125,23 +125,30 @@ public struct MediumWatchlistWidgetView: View {
 
     @ViewBuilder
     private func avatarThumbnail(for channel: WidgetChannelItem) -> some View {
-        if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .strokeBorder(channel.statusKind == .live ? Color.red.opacity(0.5) : Color.primary.opacity(0.1), lineWidth: 1)
+        Group {
+            if let image = WidgetAvatarLoader.loadNSImage(filename: channel.avatarFilename, in: avatarsDirectoryURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .strokeBorder(channel.statusKind == .live ? Color.red.opacity(0.5) : Color.primary.opacity(0.1), lineWidth: 1)
+                    )
+            } else {
+                WidgetMonogramView(
+                    displayName: channel.displayName,
+                    size: 28,
+                    isDimmed: channel.statusKind != .live
                 )
-        } else {
-            WidgetMonogramView(
-                displayName: channel.displayName,
-                size: 28,
-                isDimmed: channel.statusKind != .live
-            )
+            }
         }
+        .frame(width: 28, height: 28)
+        .overlay(
+            PlatformBadgeView(platform: channel.platform, size: 9),
+            alignment: .bottomTrailing
+        )
     }
 
     @ViewBuilder
