@@ -12,7 +12,7 @@ A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 
 
 > *"Why did I vibecode this? Because I graduated from film school doing sound. What do you expect from someone who did film sound to write world-changing code from scratch? That's dumb."*
 
-This project was built and vibecoded using **Google Antigravity** and **[Superpowers](https://github.com/obra/superpowers)** — starting raw brain-dumps and UI vents in **Gemini 3.8 Flash**, turning specs and plans over to **Claude 5.5 / Opus**, and executing via **Gemini 4 Argon / Hydrogen** and **Gemini 3.8 Flash (High Thinking)**. See [`docs/AGENTS.md`](docs/AGENTS.md) for the full agent workflow. The result is a clean, modular, zero-third-party-dependency, and fully test-driven native macOS utility.
+This project was built and vibecoded using **Google Antigravity** and **[Superpowers](https://github.com/obra/superpowers)** — starting raw brain-dumps and UI vents in **Gemini 3.8 Flash**, turning specs and plans over to **Claude 5.5 Opus**, and executing via **Gemini 4 Argon / Hydrogen** and **Gemini 3.8 Flash (High Thinking)**. See [`docs/AGENTS.md`](docs/AGENTS.md) for the full agent workflow. The result is a clean, modular, zero-third-party-dependency, and fully test-driven native macOS utility.
 
 ---
 
