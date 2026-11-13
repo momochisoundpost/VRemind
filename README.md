@@ -4,7 +4,18 @@
   <img src="Resources/Icons/app-icon.png" alt="VRemind App Icon" width="96">
 </p>
 
+<p align="center">
+  <a href="https://apple.com"><img src="https://img.shields.io/badge/Platform-macOS%2012%2B-blue?logo=apple" alt="Platform: macOS 12+"></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift" alt="Swift: 5.9+"></a>
+  <img src="https://img.shields.io/badge/Dependencies-0%20Third--Party-brightgreen" alt="Dependencies: 0 Third-Party">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT"></a>
+  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-188%20%2B%2069%20Core%20Passing-success" alt="Tests: 188 + 69 Core Passing"></a>
+</p>
+
 A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero third-party dependencies.
+
+> [!NOTE]
+> **Maintenance Mode:** With [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore) and `VRemind` now cleanly separated, **VRemind is entering maintenance mode** — no new features are planned unless someone contributes one via PR or manages to scrape **Kick.com** without API keys.
 
 ---
 
@@ -12,7 +23,7 @@ A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 
 
 > *"Why did I vibecode this? Because I graduated from film school doing sound. What do you expect from someone who did film sound to write world-changing code from scratch? That's dumb."*
 
-This project was built and vibecoded using **Google Antigravity** and **[Superpowers](https://github.com/obra/superpowers)** — starting raw brain-dumps and UI vents in **Gemini 3.8 Flash**, turning specs and plans over to **Claude 5.5 Opus**, and executing via **Gemini 4 Argon / Hydrogen** and **Gemini 3.8 Flash (High Thinking)**. See [`docs/AGENTS.md`](docs/AGENTS.md) for the full agent workflow. The result is a clean, modular, zero-third-party-dependency, and fully test-driven native macOS utility.
+This project was built and vibecoded using **Google Antigravity** and **[Superpowers](https://github.com/obra/superpowers)** — starting raw brain-dumps and UI vents in **Gemini 3.8 Flash**, turning specs and plans over to **Claude 5.5 Opus**, and executing via **Gemini 4 Argon / Hydrogen** and **Gemini 3.8 Flash (High Thinking)**. See [`docs/AGENTS.md`](docs/AGENTS.md) for the full agent workflow. The result is a clean, modular, zero-third-party-dependency, and fully test-driven native macOS utility — with its native `MarkdownView` even selected for the **XERJ Corpus Hub** as a worked Swift reference for coding agents.
 
 ---
 
@@ -53,9 +64,10 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
   - Shifts celebrating **LIVE NOW** and **UPCOMING** badges, section headers, and stream timers into an animated rainbow gradient.
   - **Non-Metal Popover Confetti**: Rains party confetti inside the menu bar popover when a milestone stream is live or airing today, drawn via pure CPU-rasterized SwiftUI `Canvas` and `TimelineView` with zero idle CPU usage when closed.
 
-- **Built-in Software Updater (`MarkdownView`)**:
+- **Built-in Software Updater (`MarkdownView` & `MarkdownVideoPlayerView`)**:
   - Periodic and manual update checks against GitHub Releases with opt-in consent and "Skip This Version".
-  - Native macOS 12-compatible Markdown renderer in the **Software Update Available** dialog supporting headings, bullet lists, code blocks, inline formatting, and embedded GitHub Release screenshots.
+  - Ultra-lightweight, 100% native macOS 12-compatible Markdown renderer in the **Software Update Available** dialog supporting headings, blockquotes (`>`), nested bullets, numbered lists, task checklists, GFM tables, code blocks, bare URL autolinking, and embedded GitHub Release screenshots.
+  - Native `AVKit` (`AVPlayerView`) muted-looping video playback for GitHub `<video>` embeds and `.mp4`/`.mov`/`.m4v` clips with a mute toggle pill, tap-to-pause, "Open Video in Browser" fallback, and automatic teardown on close — zero `WKWebView` bloat.
 
 - **Menu Bar Polish**:
   - Tactile pointing hand cursor (`NSCursor.pointingHand`) and full `@handle` tooltips on channel rows.
@@ -77,6 +89,7 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
     - **Launch at Login**: Integrates with modern `SMAppService` on macOS 13+ (Ventura and newer) with an automatic fallback to Monterey-compatible AppleScript login item management on macOS 12.
     - **Reduce Motion**: Disables popover confetti rain and slows rainbow gradients to a calm, gentle shift.
     - **Updates**: Opt-in automatic update checks, current version display, and manual **Check for Updates Now** button.
+    - **Data & Backup**: Export and restore your entire watchlist and preferences as a single schema-versioned `.json` file (`NSSavePanel` / `NSOpenPanel`) with confirmation, state sanitization, Launch at Login sync, and instant widget/monitor refresh.
     - **Factory Reset**: Restores channels and settings to their initial default state with double-confirmation protection.
   - **Notifications Tab**:
     - Granular controls for Live alerts, Upcoming stream reminders, and notification sounds.
@@ -172,7 +185,7 @@ You can also inspect the full source code and build it locally in seconds with `
 **Yes.** Caitlyn Momochi is just the default starter channel so the list isn't blank on first launch. Hover over the channel row, click the trash can icon, and add whoever you like.
 
 ### What if YouTube or Twitch changes its page or endpoint format?
-Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider` in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore), upstream platform changes can be updated cleanly without touching macOS UI code. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the Mac bridge and core engine are backed by 238 automated unit and view tests (`169` in `VRemindKitTests` + `69` in `VRemindCoreTests`).
+Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider` in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore), upstream platform changes can be updated cleanly without touching macOS UI code. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the Mac bridge and core engine are backed by 257 automated unit and view tests (`188` in `VRemindKitTests` + `69` in `VRemindCoreTests`).
 
 ---
 
@@ -184,10 +197,10 @@ VRemind consumes the portable pure-`Foundation` core engine ([`VRemindCore`](htt
 VRemind/
 ├── Package.swift                 # Depends on VRemindCore (1.0.0+) via SwiftPM
 ├── Sources/
-│   ├── VRemindKit/               # Mac bridge library (AppKit, SwiftUI, Combine, UserNotifications, WidgetKit)
+│   ├── VRemindKit/               # Mac bridge library (AppKit, SwiftUI, AVKit, Combine, UserNotifications, WidgetKit)
 │   │   ├── AppConstants.swift    # macOS app version, update endpoint, and creator/social constants
 │   │   ├── Services/             # StreamMonitorService, NotificationService, ChannelStore, PreferencesStore, UpdateService, WidgetSnapshotStore, VRemindTimelineProvider
-│   │   ├── Models/               # WidgetSnapshot, VRemindWidgetEntry
+│   │   ├── Models/               # BackupPayload, WidgetSnapshot, VRemindWidgetEntry
 │   │   ├── Utilities/            # LinkOpener, LaunchAtLoginHelper, BrandIcon
 │   │   └── Views/                # SwiftUI views (MenuBar, Preferences, Onboarding, Updates, Widget, Components, Theme)
 │   ├── VRemind/                  # Application executable
@@ -230,7 +243,7 @@ VRemind/
 
 ## Running Tests
 
-Run the macOS app & bridge automated test suite (`169` tests across `16` suites) using Apple's modern Swift Testing framework:
+Run the macOS app & bridge automated test suite (`188` tests across `17` suites — up from `169` in v1.3) using Apple's modern Swift Testing framework:
 
 ```bash
 bash scripts/test.sh
@@ -243,7 +256,7 @@ bash scripts/test.sh --filter StreamMonitorServiceTests
 bash scripts/test.sh --filter MenuBarViewTests
 ```
 
-Core engine tests (`69` tests across `11` suites covering providers, parsers, polling, storage, and celebration logic) live in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore).
+Core engine tests (`69` tests across `11` suites covering providers, parsers, polling, storage, and celebration logic) live in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore). *(Sadly `188 + 69` ruined v1.3's `169 + 69` funny number combo, so pour one out for the nice numbers.)*
 
 ---
 
@@ -269,13 +282,3 @@ Contributions, bug reports, and suggestions are welcome! See [`docs/AGENTS.md`](
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 *"You don't like what I did? Go fork yourself, it's free and open source."*
-
----
-
-<p align="center">
-  <a href="https://apple.com"><img src="https://img.shields.io/badge/Platform-macOS%2012%2B-blue?logo=apple" alt="Platform: macOS 12+"></a>
-  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift" alt="Swift: 5.9+"></a>
-  <img src="https://img.shields.io/badge/Dependencies-0%20Third--Party-brightgreen" alt="Dependencies: 0 Third-Party">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT"></a>
-  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-169%20%2B%2069%20Core%20Passing-success" alt="Tests: 169 + 69 Core Passing"></a>
-</p>
