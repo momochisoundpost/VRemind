@@ -124,7 +124,11 @@ public enum CelebrationDetector: Sendable {
             return true
         }
 
-        let cleanId = channel.id.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n\r")).lowercased()
+        var idString = channel.id
+        if idString.hasPrefix("youtube:") {
+            idString = String(idString.dropFirst("youtube:".count))
+        }
+        let cleanId = idString.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n\r")).lowercased()
         if cleanId == "bukancaitlyn" {
             return true
         }
