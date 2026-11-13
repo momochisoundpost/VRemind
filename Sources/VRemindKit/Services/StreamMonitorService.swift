@@ -147,7 +147,15 @@ public final class StreamMonitorService: ObservableObject {
         } while needsAnotherRefresh && !Task.isCancelled
     }
 
+    private var statusEpoch: UInt64 = 0
+
+    public func clearStatuses() {
+        statusEpoch &+= 1
+        statuses = [:]
+    }
+
     private func performRefreshPass() async {
+        let epoch = statusEpoch
         let channels = channelStore.channels
         let settings = preferencesStore.settings
         let currentStatuses = self.statuses
@@ -160,11 +168,16 @@ public final class StreamMonitorService: ObservableObject {
             date: dateProvider(),
             calendar: calendar
         ) { [weak self] event in
-            guard let self = self else { return }
+            guard let self = self, await self.statusEpoch == epoch else { return }
             await self.handleMonitorEvent(event)
         }
 
-        self.statuses = updatedStatuses
+        guard epoch == statusEpoch else { return }
+        let activeKeys = Set(channelStore.channels.map { $0.id.lowercased() })
+        let filteredStatuses = updatedStatuses.filter { key, _ in
+            activeKeys.contains(key.lowercased())
+        }
+        self.statuses = filteredStatuses
         await exportWidgetSnapshot()
     }
 

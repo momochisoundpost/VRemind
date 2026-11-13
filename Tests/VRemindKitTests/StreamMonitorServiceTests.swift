@@ -999,4 +999,94 @@ struct StreamMonitorServiceTests {
         #expect(lastWrite.statuses["youtube:@bukancaitlyn"] != nil)
         #expect(lastWrite.statuses["twitch:ironmouse"] != nil)
     }
+
+    @Test @MainActor func testClearStatusesPurgesCachedChannelStatuses() async throws {
+        let defaults = makeTestDefaults()
+        let channelStore = ChannelStore(userDefaults: defaults)
+        try channelStore.saveChannels([
+            WatchedChannel(id: "youtube:@old", platform: .youtube, name: "Old Channel", handle: "@old")
+        ])
+        await Task.yield()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let mockNotifier = MockNotificationService()
+
+        let liveHTML = makeLiveHTML(videoId: "old123", channelTitle: "Old Channel", streamTitle: "Old Live")
+
+        let httpFetcher: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { req in
+            let url = req.url!
+            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if url.absoluteString.contains("youtube.com") {
+                return (liveHTML, resp)
+            }
+            return (Data("{}".utf8), resp)
+        }
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            httpFetcher: httpFetcher,
+            snapshotStore: SpyWidgetSnapshotStore()
+        )
+
+        await service.refreshAll()
+        #expect(!service.statuses.isEmpty)
+        #expect(service.isAnyLive == true)
+
+        try channelStore.saveChannels([])
+        service.clearStatuses()
+        #expect(service.statuses.isEmpty)
+        #expect(service.isAnyLive == false)
+
+        // Verify performRefreshPass() does not retain statuses for channels removed mid-refresh
+        try channelStore.saveChannels([
+            WatchedChannel(id: "youtube:@mid", platform: .youtube, name: "Mid Channel", handle: "@mid")
+        ])
+        await Task.yield()
+        let midRemovalFetcher: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { req in
+            await MainActor.run {
+                try? channelStore.saveChannels([])
+            }
+            let url = req.url!
+            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (liveHTML, resp)
+        }
+
+        let midService = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            httpFetcher: midRemovalFetcher,
+            snapshotStore: SpyWidgetSnapshotStore()
+        )
+        await midService.refreshAll()
+        #expect(midService.statuses["youtube:@mid"] == nil)
+        #expect(midService.statuses.isEmpty)
+
+        // Verify in-flight clearStatuses() discards stale status updates
+        try channelStore.saveChannels([
+            WatchedChannel(id: "youtube:@inflight", platform: .youtube, name: "Inflight Channel", handle: "@inflight")
+        ])
+        await Task.yield()
+
+        var inFlightService: StreamMonitorService?
+        let inFlightFetcher: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { req in
+            await MainActor.run {
+                inFlightService?.clearStatuses()
+            }
+            let url = req.url!
+            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (liveHTML, resp)
+        }
+        let createdInFlightService = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            httpFetcher: inFlightFetcher,
+            snapshotStore: SpyWidgetSnapshotStore()
+        )
+        inFlightService = createdInFlightService
+        await createdInFlightService.refreshAll()
+        #expect(createdInFlightService.statuses.isEmpty == true)
+    }
 }

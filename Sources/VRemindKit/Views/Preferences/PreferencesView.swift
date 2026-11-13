@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import UserNotifications
 
 @MainActor
@@ -15,12 +16,17 @@ public final class PreferencesViewModel: ObservableObject {
 
     @Published public var isShowingResetConfirmation: Bool = false
     @Published public var isShowingEasterEggAlert: Bool = false
+    @Published public var isShowingRestoreConfirmation: Bool = false
+    @Published public var pendingRestorePayload: BackupPayload? = nil
+    @Published public var backupErrorMessage: String? = nil
+    @Published public var backupStatusText: String? = nil
     @Published public var updateStatusText: String? = nil
     @Published public var isCheckingUpdates: Bool = false
     @Published public var latestAvailableRelease: GitHubRelease? = nil
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus
 
     private let onFactoryReset: (() -> Void)?
+    private let onRestore: (() -> Void)?
 
     public var isAutoUpdateEnabled: Bool {
         get {
@@ -37,7 +43,8 @@ public final class PreferencesViewModel: ObservableObject {
         notificationService: NotificationService? = nil,
         updateService: UpdateService? = nil,
         onFactoryReset: (() -> Void)? = nil,
-        onUpdateAvailable: ((GitHubRelease) -> Void)? = nil
+        onUpdateAvailable: ((GitHubRelease) -> Void)? = nil,
+        onRestore: (() -> Void)? = nil
     ) {
         self.preferencesStore = preferencesStore
         self.channelStore = channelStore
@@ -45,13 +52,15 @@ public final class PreferencesViewModel: ObservableObject {
         self.updateService = updateService
         self.onFactoryReset = onFactoryReset
         self.onUpdateAvailable = onUpdateAvailable
+        self.onRestore = onRestore
         self.authorizationStatus = notificationService?.authorizationStatus ?? .notDetermined
     }
 
     public convenience init(
         preferencesStore: PreferencesStore,
         channelStore: ChannelStore,
-        onFactoryReset: (() -> Void)? = nil
+        onFactoryReset: (() -> Void)? = nil,
+        onRestore: (() -> Void)? = nil
     ) {
         self.init(
             preferencesStore: preferencesStore,
@@ -59,7 +68,8 @@ public final class PreferencesViewModel: ObservableObject {
             notificationService: NotificationService(),
             updateService: nil,
             onFactoryReset: onFactoryReset,
-            onUpdateAvailable: nil
+            onUpdateAvailable: nil,
+            onRestore: onRestore
         )
     }
 
@@ -135,6 +145,84 @@ public final class PreferencesViewModel: ObservableObject {
         }
         return result
     }
+
+    public func buildBackupData() throws -> Data {
+        let payload = BackupPayload(
+            settings: preferencesStore.settings,
+            channels: channelStore.channels
+        )
+        return try payload.encodedJSONData()
+    }
+
+    public func prepareRestore(from data: Data) {
+        backupErrorMessage = nil
+        do {
+            let payload = try BackupPayload.decodeAndValidate(from: data)
+            pendingRestorePayload = payload
+            isShowingRestoreConfirmation = true
+        } catch {
+            pendingRestorePayload = nil
+            isShowingRestoreConfirmation = false
+            backupErrorMessage = error.localizedDescription
+        }
+    }
+
+    public func confirmRestore() {
+        guard let payload = pendingRestorePayload else { return }
+        let sanitized = payload.sanitizedForRestore()
+        preferencesStore.settings = sanitized.settings
+        try? channelStore.saveChannels(sanitized.channels)
+        _ = LaunchAtLoginHelper.setEnabled(sanitized.settings.launchAtLogin)
+        pendingRestorePayload = nil
+        isShowingRestoreConfirmation = false
+        backupErrorMessage = nil
+        backupStatusText = "Restored \(sanitized.channels.count) channel(s) from backup."
+        onRestore?()
+    }
+
+    public func cancelRestore() {
+        pendingRestorePayload = nil
+        isShowingRestoreConfirmation = false
+    }
+
+    public func exportBackup(chooseSaveURL: (() -> URL?)? = nil) {
+        backupErrorMessage = nil
+        guard let url = chooseSaveURL?() ?? presentSavePanel() else { return }
+        do {
+            let data = try buildBackupData()
+            try data.write(to: url, options: .atomic)
+            backupStatusText = "Backup exported."
+        } catch {
+            backupErrorMessage = error.localizedDescription
+        }
+    }
+
+    public func restoreBackup(chooseOpenURL: (() -> URL?)? = nil) {
+        backupErrorMessage = nil
+        guard let url = chooseOpenURL?() ?? presentOpenPanel() else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            prepareRestore(from: data)
+        } catch {
+            backupErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func presentSavePanel() -> URL? {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = BackupPayload.defaultBackupFilename()
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func presentOpenPanel() -> URL? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        return panel.runModal() == .OK ? panel.url : nil
+    }
 }
 
 public struct PreferencesView: View {
@@ -166,13 +254,14 @@ public struct PreferencesView: View {
                 }
                 .tag(2)
         }
-        .frame(width: 480, height: 400)
+        .frame(width: 480, height: 460)
     }
 
     // MARK: - Tab 1: General
 
     private var generalTab: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Startup")
                     .font(.headline)
@@ -246,6 +335,59 @@ public struct PreferencesView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("Data & Backup")
+                    .font(.headline)
+
+                Text("Export your watchlist and preferences to a JSON file, or restore from a previous backup.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 12) {
+                    Button("Export Backup...") {
+                        viewModel.exportBackup()
+                    }
+                    .buttonStyle(.bordered)
+                    .alert(
+                        isPresented: Binding(
+                            get: { viewModel.backupErrorMessage != nil },
+                            set: { if !$0 { viewModel.backupErrorMessage = nil } }
+                        )
+                    ) {
+                        Alert(
+                            title: Text("Backup Failed"),
+                            message: Text(viewModel.backupErrorMessage ?? ""),
+                            dismissButton: .default(Text("OK"))
+                        )
+                    }
+
+                    Button("Restore Backup...") {
+                        viewModel.restoreBackup()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if let backupStatus = viewModel.backupStatusText {
+                    Text(backupStatus)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .alert(isPresented: $viewModel.isShowingRestoreConfirmation) {
+                Alert(
+                    title: Text("Restore Backup?"),
+                    message: Text("This will replace your current watchlist (\(viewModel.channelStore.channels.count) channel(s)) and app preferences with the selected backup. This cannot be undone."),
+                    primaryButton: .destructive(Text("Restore")) {
+                        viewModel.confirmRestore()
+                    },
+                    secondaryButton: .cancel {
+                        viewModel.cancelRestore()
+                    }
+                )
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Danger Zone")
                     .font(.headline)
                     .foregroundColor(.red)
@@ -271,8 +413,9 @@ public struct PreferencesView: View {
             }
 
             Spacer()
+            }
+            .padding(20)
         }
-        .padding(20)
     }
 
     // MARK: - Tab 2: Notifications
