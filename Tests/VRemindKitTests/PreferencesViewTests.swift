@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -450,5 +451,31 @@ struct PreferencesViewTests {
         #expect(viewModel.pendingRestorePayload == nil)
         #expect(store.channels.count == 1)
         #expect(store.channels.first?.handle == "@existing")
+    }
+
+    @Test @MainActor func testPreferencesViewRendersWithPendingRestoreAndErrorState() {
+        let defaults = makeTestDefaults()
+        let prefs = PreferencesStore(userDefaults: defaults)
+        let store = ChannelStore(userDefaults: defaults)
+        let viewModel = PreferencesViewModel(preferencesStore: prefs, channelStore: store)
+
+        viewModel.backupStatusText = "Backup exported."
+        viewModel.backupErrorMessage = "Invalid file"
+
+        let view = PreferencesView(viewModel: viewModel)
+        let hostingController = NSHostingController(rootView: view)
+        let size = hostingController.view.fittingSize
+        #expect(size.width >= 0)
+        #expect(size.height >= 0)
+
+        viewModel.pendingRestorePayload = BackupPayload(
+            settings: AppSettings(),
+            channels: [WatchedChannel(id: "youtube:@test", platform: .youtube, name: "Test", handle: "@test")]
+        )
+        viewModel.isShowingRestoreConfirmation = true
+
+        let confirmationSize = hostingController.view.fittingSize
+        #expect(confirmationSize.width >= 0)
+        #expect(confirmationSize.height >= 0)
     }
 }

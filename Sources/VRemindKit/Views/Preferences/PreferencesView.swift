@@ -254,13 +254,14 @@ public struct PreferencesView: View {
                 }
                 .tag(2)
         }
-        .frame(width: 480, height: 400)
+        .frame(width: 480, height: 460)
     }
 
     // MARK: - Tab 1: General
 
     private var generalTab: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Startup")
                     .font(.headline)
@@ -334,6 +335,59 @@ public struct PreferencesView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("Data & Backup")
+                    .font(.headline)
+
+                Text("Export your watchlist and preferences to a JSON file, or restore from a previous backup.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 12) {
+                    Button("Export Backup...") {
+                        viewModel.exportBackup()
+                    }
+                    .buttonStyle(.bordered)
+                    .alert(
+                        isPresented: Binding(
+                            get: { viewModel.backupErrorMessage != nil },
+                            set: { if !$0 { viewModel.backupErrorMessage = nil } }
+                        )
+                    ) {
+                        Alert(
+                            title: Text("Backup Failed"),
+                            message: Text(viewModel.backupErrorMessage ?? ""),
+                            dismissButton: .default(Text("OK"))
+                        )
+                    }
+
+                    Button("Restore Backup...") {
+                        viewModel.restoreBackup()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if let backupStatus = viewModel.backupStatusText {
+                    Text(backupStatus)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .alert(isPresented: $viewModel.isShowingRestoreConfirmation) {
+                Alert(
+                    title: Text("Restore Backup?"),
+                    message: Text("This will replace your current watchlist (\(viewModel.channelStore.channels.count) channel(s)) and app preferences with the selected backup. This cannot be undone."),
+                    primaryButton: .destructive(Text("Restore")) {
+                        viewModel.confirmRestore()
+                    },
+                    secondaryButton: .cancel {
+                        viewModel.cancelRestore()
+                    }
+                )
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Danger Zone")
                     .font(.headline)
                     .foregroundColor(.red)
@@ -359,8 +413,9 @@ public struct PreferencesView: View {
             }
 
             Spacer()
+            }
+            .padding(20)
         }
-        .padding(20)
     }
 
     // MARK: - Tab 2: Notifications

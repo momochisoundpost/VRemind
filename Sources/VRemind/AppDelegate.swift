@@ -110,6 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateService: updateService,
             onFactoryReset: { [weak self] in
                 self?.handleFactoryReset()
+            },
+            onRestore: { [weak self] in
+                self?.handleRestore()
             }
         )
     }
@@ -118,8 +121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover?.performClose(nil)
         Task { [weak self] in
             guard let self else { return }
+            self.monitorService.clearStatuses()
+            await self.monitorService.exportWidgetSnapshot()
             await self.monitorService.refreshAll()
             self.showOnboardingIfNeeded()
+        }
+    }
+
+    private func handleRestore() {
+        Task { [weak self] in
+            guard let self else { return }
+            self.monitorService.clearStatuses()
+            await self.monitorService.exportWidgetSnapshot()
+            await self.monitorService.refreshAll()
         }
     }
 
