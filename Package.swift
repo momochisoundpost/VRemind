@@ -5,13 +5,18 @@ let package = Package(
     name: "VRemind",
     platforms: [.macOS(.v12)],
     products: [
+        .library(name: "VRemindCore", targets: ["VRemindCore"]),
         .library(name: "VRemindKit", targets: ["VRemindKit"]),
         .executable(name: "VRemind", targets: ["VRemind"]),
         .executable(name: "VRemindWidget", targets: ["VRemindWidget"]),
     ],
     targets: [
         .target(
-            name: "VRemindKit"
+            name: "VRemindCore"
+        ),
+        .target(
+            name: "VRemindKit",
+            dependencies: ["VRemindCore"]
         ),
         .executableTarget(
             name: "VRemind",
@@ -24,6 +29,10 @@ let package = Package(
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])
             ]
+        ),
+        .testTarget(
+            name: "VRemindCoreTests",
+            dependencies: ["VRemindCore"]
         ),
         .testTarget(
             name: "VRemindKitTests",

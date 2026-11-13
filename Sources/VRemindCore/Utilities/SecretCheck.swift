@@ -16,7 +16,7 @@ public enum SecretCheck: Sendable {
     }
 
     public static func isTarget(_ input: String) -> Bool {
-        let handle = WatchedChannel.normalizeHandle(input) ?? input
+        let handle = WatchedChannel.normalizeHandle(input, for: .youtube) ?? WatchedChannel.normalizeHandle(input, for: .twitch) ?? input
         let clean = handle.trimmingCharacters(in: CharacterSet(charactersIn: "@ \t\n\r")).lowercased()
         guard !clean.isEmpty else { return false }
         return clean == decode(targetBytes)
