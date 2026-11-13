@@ -12,7 +12,7 @@ A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 
 
 > *"Why did I vibecode this? Because I graduated from film school doing sound. What do you expect from someone who did film sound to write world-changing code from scratch? That's dumb."*
 
-This project was built and vibecoded using **Google Antigravity**, pairing **Claude Opus** for architecture and planning with **Gemini Argon** for implementation and deep optimization. The result is a clean, modular, zero-dependency, and fully test-driven native macOS utility.
+This project was built and vibecoded using **Google Antigravity** and **[Superpowers](https://github.com/obra/superpowers)** — starting raw brain-dumps and UI vents in **Gemini 3.8 Flash**, turning specs and plans over to **Claude 5.5 / Opus**, and executing via **Gemini 4 Argon / Hydrogen** and **Gemini 3.8 Flash (High Thinking)**. See [`docs/AGENTS.md`](docs/AGENTS.md) for the full agent workflow. The result is a clean, modular, zero-third-party-dependency, and fully test-driven native macOS utility.
 
 ---
 
@@ -202,6 +202,9 @@ VRemind/
 │       └── Views/                # SmallHeroWidgetView, MediumWatchlistWidgetView, LargeDashboardWidgetView
 ├── Tests/
 │   └── VRemindKitTests/          # Mac bridge, migration, notification, widget, and view tests
+├── docs/
+│   ├── AGENTS.md                 # AI-agent workflow (Gemini 3.8 Flash venting -> Claude 5.5/Opus planning -> Gemini SDD)
+│   └── superpowers/              # Archived design specs and implementation plans
 ├── Resources/
 │   ├── Info.plist                # App bundle metadata (LSUIElement = true for menu bar only)
 │   ├── Widget-Info.plist         # WidgetKit extension metadata
@@ -253,7 +256,7 @@ Core engine tests (`69` tests across `11` suites covering providers, parsers, po
 
 ## Contributing
 
-Contributions, bug reports, and suggestions are welcome!
+Contributions, bug reports, and suggestions are welcome! See [`docs/AGENTS.md`](docs/AGENTS.md) if you're using AI coding agents.
 1. Fork the repository.
 2. Create your feature branch (`git checkout -b feat/my-new-feature`).
 3. Make sure all unit tests pass (`bash scripts/test.sh`).
