@@ -45,10 +45,7 @@ public struct UpdateAvailableView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     if let body = release.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(LocalizedStringKey(body))
-                            .font(.system(.body, design: .default))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                        MarkdownView(markdown: body)
                     } else {
                         Text("No release notes provided.")
                             .font(.body)
