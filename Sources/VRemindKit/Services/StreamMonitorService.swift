@@ -168,7 +168,7 @@ public final class StreamMonitorService: ObservableObject {
             date: dateProvider(),
             calendar: calendar
         ) { [weak self] event in
-            guard let self = self else { return }
+            guard let self = self, await self.statusEpoch == epoch else { return }
             await self.handleMonitorEvent(event)
         }
 

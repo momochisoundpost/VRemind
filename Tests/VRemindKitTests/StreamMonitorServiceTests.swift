@@ -1062,5 +1062,31 @@ struct StreamMonitorServiceTests {
         await midService.refreshAll()
         #expect(midService.statuses["youtube:@mid"] == nil)
         #expect(midService.statuses.isEmpty)
+
+        // Verify in-flight clearStatuses() discards stale status updates
+        try channelStore.saveChannels([
+            WatchedChannel(id: "youtube:@inflight", platform: .youtube, name: "Inflight Channel", handle: "@inflight")
+        ])
+        await Task.yield()
+
+        var inFlightService: StreamMonitorService?
+        let inFlightFetcher: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { req in
+            await MainActor.run {
+                inFlightService?.clearStatuses()
+            }
+            let url = req.url!
+            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (liveHTML, resp)
+        }
+        let createdInFlightService = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            httpFetcher: inFlightFetcher,
+            snapshotStore: SpyWidgetSnapshotStore()
+        )
+        inFlightService = createdInFlightService
+        await createdInFlightService.refreshAll()
+        #expect(createdInFlightService.statuses.isEmpty == true)
     }
 }
