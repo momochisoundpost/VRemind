@@ -19,7 +19,7 @@ We use **Google Antigravity** paired with the **[Superpowers](https://github.com
                    ▼                               ▼
 ┌─────────────────────────────────┐  ┌─────────────────────────────────┐
 │     Stage 0: Vent & Ideate      │  │   Stages 1–2: Spec & Planning   │
-│      (Gemini 3.8 Flash)         │  │      (Claude 5.5 / Opus)        │
+│      (Gemini 3.8 Flash)         │  │        (Claude 5.5 Opus)        │
 ├─────────────────────────────────┤  ├─────────────────────────────────┤
 │ • Brain-dump raw feature ideas  │  │ • Formalize design specs        │
 │ • React to UI screenshots       │  │ • Architectural boundaries      │
@@ -44,7 +44,7 @@ We use **Google Antigravity** paired with the **[Superpowers](https://github.com
 - **Stage 0 — Venting & Brainstorming Starting Point (`Gemini 3.8 Flash`):**
   - **Strengths:** Fast, conversational iteration with zero friction when ideas aren't fully formed yet.
   - **Responsibilities:** Starting point for "venting it out" — dumping raw UX frustrations, attaching menu bar/widget screenshots, riffing on copy or visual direction ("whatever I like/want"), and converging on what the feature should feel like before writing a formal spec.
-- **Stages 1–2 — Planning & Architecture (`Claude 5.5 / Claude Opus`):**
+- **Stages 1–2 — Planning & Architecture (`Claude 5.5 Opus`):**
   - **Strengths:** High contextual rigor, structural reasoning, boundary discipline (`VRemindCore` vs. `VRemindKit`), and edge-case discovery.
   - **Responsibilities:** Distilling brainstormed intent into a design doc (`docs/superpowers/specs/*.md`) and breaking work into bite-sized, single-responsibility tasks in an implementation plan (`docs/superpowers/plans/*.md`).
 - **Stages 3–4 — Implementation & Verification (`Gemini 4 Argon / Hydrogen` or `Gemini 3.8 Flash High`):**
