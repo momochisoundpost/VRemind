@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UserNotifications
+import VRemindCore
 
 @MainActor
 public protocol NotificationCenterProtocol: AnyObject {
@@ -130,6 +131,8 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         title: String,
         videoId: String,
         channelHandle: String = "",
+        platform: StreamPlatform = .youtube,
+        watchURL: URL? = nil,
         playSound: Bool
     ) async {
         liveNotificationCount += 1
@@ -137,10 +140,27 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         let content = UNMutableNotificationContent()
         content.title = channelName
         content.body = "🔴 LIVE: \(title)"
-        content.userInfo = [
+
+        var userInfo: [String: Any] = [
             "videoId": videoId,
-            "channelHandle": channelHandle
+            "channelHandle": channelHandle,
+            "platform": platform.rawValue
         ]
+
+        let resolvedURL: URL?
+        if let watchURL {
+            resolvedURL = watchURL
+        } else if platform == .youtube && !videoId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            resolvedURL = URL(string: "https://www.youtube.com/watch?v=\(videoId)")
+        } else {
+            resolvedURL = nil
+        }
+
+        if let resolvedURL {
+            userInfo["watchURL"] = resolvedURL.absoluteString
+        }
+
+        content.userInfo = userInfo
         content.sound = playSound ? .default : nil
 
         let identifier = "live-\(videoId.isEmpty ? UUID().uuidString : videoId)"
@@ -158,6 +178,8 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         title: String,
         videoId: String,
         channelHandle: String = "",
+        platform: StreamPlatform = .youtube,
+        watchURL: URL? = nil,
         playSound: Bool
     ) async {
         upcomingNotificationCount += 1
@@ -165,10 +187,27 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
         let content = UNMutableNotificationContent()
         content.title = channelName
         content.body = "⏳ UPCOMING: \(title)"
-        content.userInfo = [
+
+        var userInfo: [String: Any] = [
             "videoId": videoId,
-            "channelHandle": channelHandle
+            "channelHandle": channelHandle,
+            "platform": platform.rawValue
         ]
+
+        let resolvedURL: URL?
+        if let watchURL {
+            resolvedURL = watchURL
+        } else if platform == .youtube && !videoId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            resolvedURL = URL(string: "https://www.youtube.com/watch?v=\(videoId)")
+        } else {
+            resolvedURL = nil
+        }
+
+        if let resolvedURL {
+            userInfo["watchURL"] = resolvedURL.absoluteString
+        }
+
+        content.userInfo = userInfo
         content.sound = playSound ? .default : nil
 
         let identifier = "upcoming-\(videoId.isEmpty ? UUID().uuidString : videoId)"
@@ -215,6 +254,16 @@ public final class NotificationService: NSObject, ObservableObject, UNUserNotifi
            let mailtoURL = URL(string: mailtoString),
            mailtoURL.scheme == "mailto" {
             urlOpener(mailtoURL)
+            return
+        }
+
+        if let watchURLString = userInfo["watchURL"] as? String,
+           let url = URL(string: watchURLString),
+           let scheme = url.scheme?.lowercased(),
+           (scheme == "http" || scheme == "https"),
+           let host = url.host,
+           !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            urlOpener(url)
             return
         }
 

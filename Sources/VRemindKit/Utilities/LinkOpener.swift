@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import VRemindCore
 
 public enum LinkOpener {
     public struct SharedOpener: Sendable {
@@ -16,6 +17,14 @@ public enum LinkOpener {
         public func videoURL(for youtubeId: String) -> URL {
             LinkOpener.videoURL(for: youtubeId)
         }
+
+        public func channelURL(for platform: StreamPlatform, handle: String) -> URL {
+            LinkOpener.channelURL(for: platform, handle: handle)
+        }
+
+        public func streamURL(for channel: WatchedChannel, status: StreamStatus) -> URL {
+            LinkOpener.streamURL(for: channel, status: status)
+        }
     }
 
     public static let shared = SharedOpener()
@@ -25,6 +34,30 @@ public enum LinkOpener {
     public static func videoURL(for youtubeId: String) -> URL {
         let encoded = youtubeId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? youtubeId
         return URL(string: "https://www.youtube.com/watch?v=\(encoded)") ?? fallbackURL
+    }
+
+    public static func channelURL(for platform: StreamPlatform, handle: String) -> URL {
+        if let url = StreamProviderRegistry.default.channelURL(for: platform, handle: handle) {
+            return url
+        }
+        switch platform {
+        case .youtube:
+            return URL(string: "https://www.youtube.com")!
+        case .twitch:
+            return URL(string: "https://www.twitch.tv")!
+        }
+    }
+
+    public static func streamURL(for channel: WatchedChannel, status: StreamStatus) -> URL {
+        if let url = StreamProviderRegistry.default.watchURL(for: channel, status: status) {
+            return url
+        }
+        switch channel.platform {
+        case .youtube:
+            return URL(string: "https://www.youtube.com")!
+        case .twitch:
+            return URL(string: "https://www.twitch.tv")!
+        }
     }
 
     /// Parses and validates a deep link with scheme `vremind://open-stream?url=<target>`.

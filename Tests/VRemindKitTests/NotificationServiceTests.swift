@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 import UserNotifications
+import VRemindCore
 @testable import VRemindKit
 
 @MainActor
@@ -284,5 +285,44 @@ struct NotificationServiceTests {
         #expect(mockCenter.requests.count == 1)
         let request = try #require(mockCenter.requests.first)
         #expect(request.content.sound == nil)
+    }
+
+    @Test @MainActor func testNotifyLiveWithPlatformAndWatchURLOpensResolvedURL() async throws {
+        let mockCenter = MockNotificationCenter()
+        var openedURL: URL?
+        let service = NotificationService(
+            center: mockCenter,
+            urlOpener: { openedURL = $0 }
+        )
+        let twitchURL = URL(string: "https://www.twitch.tv/ironmouse")!
+
+        await service.notifyLive(
+            channelName: "Ironmouse",
+            title: "Late Night Stream",
+            videoId: "stream1",
+            channelHandle: "ironmouse",
+            platform: .twitch,
+            watchURL: twitchURL,
+            playSound: true
+        )
+
+        #expect(mockCenter.requests.count == 1)
+        let request = try #require(mockCenter.requests.first)
+        #expect(request.content.userInfo["platform"] as? String == "twitch")
+        #expect(request.content.userInfo["watchURL"] as? String == "https://www.twitch.tv/ironmouse")
+
+        service.handleNotificationClick(userInfo: request.content.userInfo)
+        #expect(openedURL == twitchURL)
+    }
+
+    @Test @MainActor func testHandleNotificationClickLegacyUserInfoWithoutWatchURLOpensYouTubeURL() {
+        var openedURL: URL?
+        let service = NotificationService(
+            center: MockNotificationCenter(),
+            urlOpener: { openedURL = $0 }
+        )
+
+        service.handleNotificationClick(userInfo: ["videoId": "xyz789", "channelHandle": "@bukancaitlyn"])
+        #expect(openedURL == URL(string: "https://www.youtube.com/watch?v=xyz789"))
     }
 }

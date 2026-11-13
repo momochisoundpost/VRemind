@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import VRemindCore
 
 @MainActor
 public final class StreamMonitorService: ObservableObject {
@@ -30,8 +31,11 @@ public final class StreamMonitorService: ObservableObject {
     public let channelStore: ChannelStore
     public let preferencesStore: PreferencesStore
     public let notificationService: NotificationService
-    public let fetcher: Fetcher
     public let snapshotStore: WidgetSnapshotStoreProtocol
+    public let providerRegistry: StreamProviderRegistry
+    public let engine: StreamMonitorEngine
+    public let httpFetcher: HTTPFetcher
+    public let fetcher: Fetcher
 
     public private(set) var isPolling: Bool = false
     public private(set) var isPausedForSleep: Bool = false
@@ -49,7 +53,9 @@ public final class StreamMonitorService: ObservableObject {
         channelStore: ChannelStore,
         preferencesStore: PreferencesStore,
         notificationService: NotificationService,
-        fetcher: @escaping Fetcher = StreamMonitorService.defaultFetcher,
+        fetcher: Fetcher? = nil,
+        httpFetcher: HTTPFetcher? = nil,
+        providerRegistry: StreamProviderRegistry = .default,
         notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
         snapshotStore: WidgetSnapshotStoreProtocol = WidgetSnapshotStore.shared,
         dateProvider: @escaping @Sendable () -> Date = { Date() },
@@ -58,16 +64,35 @@ public final class StreamMonitorService: ObservableObject {
         self.channelStore = channelStore
         self.preferencesStore = preferencesStore
         self.notificationService = notificationService
-        self.fetcher = fetcher
+        self.providerRegistry = providerRegistry
         self.notificationCenter = notificationCenter
         self.snapshotStore = snapshotStore
         self.dateProvider = dateProvider
         self.calendar = calendar
+        self.engine = StreamMonitorEngine(registry: providerRegistry)
+
+        if let httpFetcher = httpFetcher {
+            self.httpFetcher = httpFetcher
+            self.fetcher = fetcher ?? { url in
+                try await httpFetcher(URLRequest(url: url))
+            }
+        } else if let fetcher = fetcher {
+            self.fetcher = fetcher
+            self.httpFetcher = { request in
+                guard let url = request.url else {
+                    throw URLError(.badURL)
+                }
+                return try await fetcher(url)
+            }
+        } else {
+            self.httpFetcher = StreamMonitorEngine.defaultFetcher
+            self.fetcher = StreamMonitorService.defaultFetcher
+        }
     }
 
     public var isAnyLive: Bool {
         channelStore.channels.contains { channel in
-            if case .live = statuses[channel.id] {
+            if case .live = status(for: channel) {
                 return true
             }
             return false
@@ -75,7 +100,7 @@ public final class StreamMonitorService: ObservableObject {
     }
 
     public func status(for channel: WatchedChannel) -> StreamStatus {
-        statuses[channel.id] ?? .unknown
+        statuses[channel.id] ?? statuses[channel.id.lowercased()] ?? .unknown
     }
 
     public func exportWidgetSnapshot() async {
@@ -123,161 +148,82 @@ public final class StreamMonitorService: ObservableObject {
     }
 
     private func performRefreshPass() async {
-        await checkDeveloperBirthdayNotificationIfNeeded()
         let channels = channelStore.channels
-        guard !channels.isEmpty else {
-            await exportWidgetSnapshot()
-            return
+        let settings = preferencesStore.settings
+        let currentStatuses = self.statuses
+
+        let updatedStatuses = await engine.refreshPass(
+            channels: channels,
+            settings: settings,
+            currentStatuses: currentStatuses,
+            fetcher: self.httpFetcher,
+            date: dateProvider(),
+            calendar: calendar
+        ) { [weak self] event in
+            guard let self = self else { return }
+            await self.handleMonitorEvent(event)
         }
 
-        let batchSize = 3
-        let fetch = self.fetcher
-
-        for startIndex in stride(from: 0, to: channels.count, by: batchSize) {
-            guard !Task.isCancelled else { break }
-            let endIndex = min(startIndex + batchSize, channels.count)
-            let batch = Array(channels[startIndex..<endIndex])
-
-            typealias FetchOutcome = (
-                channel: WatchedChannel,
-                result: Result<(LivePageResult, String?, URL?), Error>
-            )
-
-            let outcomes: [FetchOutcome] = await withTaskGroup(of: FetchOutcome.self) { group in
-                for channel in batch {
-                    group.addTask {
-                        let urlString: String
-                        if channel.handle.hasPrefix("@") {
-                            urlString = "https://www.youtube.com/\(channel.handle)/live"
-                        } else {
-                            urlString = "https://www.youtube.com/@\(channel.handle)/live"
-                        }
-
-                        guard let url = URL(string: urlString) else {
-                            return (channel, .failure(URLError(.badURL)))
-                        }
-
-                        do {
-                            let (data, _) = try await fetch(url)
-                            let outcome = autoreleasepool { () -> (LivePageResult, String?, URL?) in
-                                guard let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-                                    return (.unrecognized, nil, nil)
-                                }
-                                let parsed = LivePageParser.parse(html: html)
-                                let extractedTitle = LivePageParser.extractChannelTitle(from: html)
-                                let extractedAvatar = LivePageParser.extractAvatarURL(from: html)
-                                return (parsed, extractedTitle, extractedAvatar)
-                            }
-                            return (channel, .success(outcome))
-                        } catch {
-                            return (channel, .failure(error))
-                        }
-                    }
-                }
-
-                var collected: [FetchOutcome] = []
-                for await item in group {
-                    collected.append(item)
-                }
-                return collected
-            }
-
-            for outcome in outcomes {
-                await apply(outcome: outcome)
-            }
-        }
-
+        self.statuses = updatedStatuses
         await exportWidgetSnapshot()
     }
 
-    private func apply(outcome: (channel: WatchedChannel, result: Result<(LivePageResult, String?, URL?), Error>)) async {
-        let channel = outcome.channel
-        switch outcome.result {
-        case .failure:
-            statuses[channel.id] = .unknown
-            channelStore.updateStatus(for: channel.id, status: .unknown)
+    private func handleMonitorEvent(_ event: MonitorEvent) async {
+        switch event {
+        case .statusUpdated(let channelId, let status):
+            statuses[channelId] = status
+            channelStore.updateStatus(for: channelId, status: status)
 
-        case .success((let pageResult, let extractedTitle, let extractedAvatar)):
-            var titleToUpdate = extractedTitle
-            var avatarToUpdate = extractedAvatar
+        case .metadataUpdated(let channelId, let name, let avatarURL):
+            channelStore.updateMetadata(for: channelId, name: name, avatarURL: avatarURL)
 
-            if case .notLive(let channelTitle, let avatarURL) = pageResult {
-                if titleToUpdate == nil { titleToUpdate = channelTitle }
-                if avatarToUpdate == nil { avatarToUpdate = avatarURL }
-            }
+        case .notifyLive(let channel, let videoId, let title):
+            let liveStatus = StreamStatus.live(videoId: videoId, title: title, startedAt: nil)
+            let watchURL = LinkOpener.streamURL(for: channel, status: liveStatus)
+            let current = channelStore.channels.first(where: { $0.id.lowercased() == channel.id.lowercased() }) ?? channel
+            await notificationService.notifyLive(
+                channelName: current.name,
+                title: title,
+                videoId: videoId,
+                channelHandle: current.handle,
+                platform: current.platform,
+                watchURL: watchURL,
+                playSound: preferencesStore.settings.playNotificationSound
+            )
+            channelStore.updateStatus(
+                for: channel.id,
+                status: statuses[channel.id] ?? liveStatus,
+                notifiedLiveId: videoId
+            )
 
-            if titleToUpdate != nil || avatarToUpdate != nil {
-                channelStore.updateMetadata(for: channel.id, name: titleToUpdate, avatarURL: avatarToUpdate)
-            }
+        case .notifyUpcoming(let channel, let videoId, let title):
+            let upcomingStatus = StreamStatus.upcoming(videoId: videoId, title: title, scheduledStartTime: nil)
+            let watchURL = LinkOpener.streamURL(for: channel, status: upcomingStatus)
+            let current = channelStore.channels.first(where: { $0.id.lowercased() == channel.id.lowercased() }) ?? channel
+            await notificationService.notifyUpcoming(
+                channelName: current.name,
+                title: title,
+                videoId: videoId,
+                channelHandle: current.handle,
+                platform: current.platform,
+                watchURL: watchURL,
+                playSound: preferencesStore.settings.playNotificationSound
+            )
+            channelStore.updateStatus(
+                for: channel.id,
+                status: statuses[channel.id] ?? upcomingStatus,
+                notifiedUpcomingId: videoId
+            )
 
-            let currentChannel = channelStore.channels.first(where: { $0.id == channel.id }) ?? channel
+        case .notifyDeveloperBirthday(let year):
+            preferencesStore.settings.lastNotifiedDevBirthdayYear = year
+            await notificationService.notifyDeveloperBirthday(
+                year: year,
+                playSound: preferencesStore.settings.playNotificationSound
+            )
 
-            switch pageResult {
-            case .live(let videoId, let title, let startedAt):
-                let streamStatus = StreamStatus.live(videoId: videoId, title: title, startedAt: startedAt)
-                statuses[channel.id] = streamStatus
-
-                let shouldNotify = (currentChannel.lastNotifiedVideoId != videoId) && preferencesStore.settings.notifyOnLive
-                if shouldNotify {
-                    await notificationService.notifyLive(
-                        channelName: currentChannel.name,
-                        title: title,
-                        videoId: videoId,
-                        channelHandle: currentChannel.handle,
-                        playSound: preferencesStore.settings.playNotificationSound
-                    )
-                    channelStore.updateStatus(
-                        for: channel.id,
-                        status: streamStatus,
-                        notifiedLiveId: videoId
-                    )
-                } else {
-                    channelStore.updateStatus(
-                        for: channel.id,
-                        status: streamStatus
-                    )
-                }
-
-            case .upcoming(let videoId, let title, let scheduledStartTime):
-                let streamStatus = StreamStatus.upcoming(videoId: videoId, title: title, scheduledStartTime: scheduledStartTime)
-                statuses[channel.id] = streamStatus
-
-                let shouldNotify = (currentChannel.lastNotifiedUpcomingId != videoId) && preferencesStore.settings.notifyOnUpcoming
-                if shouldNotify {
-                    await notificationService.notifyUpcoming(
-                        channelName: currentChannel.name,
-                        title: title,
-                        videoId: videoId,
-                        channelHandle: currentChannel.handle,
-                        playSound: preferencesStore.settings.playNotificationSound
-                    )
-                    channelStore.updateStatus(
-                        for: channel.id,
-                        status: streamStatus,
-                        notifiedUpcomingId: videoId
-                    )
-                } else {
-                    channelStore.updateStatus(
-                        for: channel.id,
-                        status: streamStatus
-                    )
-                }
-
-            case .notLive:
-                let offlineStatus = StreamStatus.offline(lastStreamedAt: currentChannel.lastStreamedAt)
-                statuses[channel.id] = offlineStatus
-                channelStore.updateStatus(
-                    for: channel.id,
-                    status: offlineStatus
-                )
-
-            case .unrecognized:
-                statuses[channel.id] = .unknown
-                channelStore.updateStatus(
-                    for: channel.id,
-                    status: .unknown
-                )
-            }
+        case .refreshFinished(let finalStatuses):
+            self.statuses = finalStatuses
         }
     }
 

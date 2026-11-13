@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 import UserNotifications
+import VRemindCore
 @testable import VRemindKit
 
 func XCTAssertEqual<T: Equatable>(_ a: T, _ b: T, _ message: String = "") {
@@ -301,7 +302,7 @@ struct StreamMonitorServiceTests {
 
         await service.refreshAll()
 
-        let updatedChannel = channelStore.channels.first(where: { $0.id == "@bukancaitlyn" })
+        let updatedChannel = channelStore.channels.first(where: { $0.id == "youtube:@bukancaitlyn" })
         #expect(updatedChannel?.name == "Caitlyn Official")
         #expect(updatedChannel?.avatarURL?.absoluteString == "https://yt3.googleusercontent.com/caitlyn-avatar=s800")
     }
@@ -326,13 +327,13 @@ struct StreamMonitorServiceTests {
         )
 
         await service.refreshAll()
-        let liveChannel = channelStore.channels.first(where: { $0.id == "@bukancaitlyn" })
+        let liveChannel = channelStore.channels.first(where: { $0.id == "youtube:@bukancaitlyn" })
         #expect(liveChannel?.lastStreamedAt != nil)
         let lastStreamed = liveChannel?.lastStreamedAt
 
         isLive.set(false)
         await service.refreshAll()
-        let offlineChannel = channelStore.channels.first(where: { $0.id == "@bukancaitlyn" })
+        let offlineChannel = channelStore.channels.first(where: { $0.id == "youtube:@bukancaitlyn" })
         #expect(offlineChannel?.lastStreamedAt == lastStreamed)
 
         if case .offline(let timestamp) = service.status(for: offlineChannel!) {
@@ -381,7 +382,7 @@ struct StreamMonitorServiceTests {
             fetcher: { _ in (makeLiveHTML(videoId: "s1"), make200Response()) }
         )
 
-        let unwatchedChannel = WatchedChannel(id: "@unknown", name: "Unknown", handle: "@unknown")
+        let unwatchedChannel = WatchedChannel(id: "youtube:@unknown", name: "Unknown", handle: "@unknown")
         #expect(service.status(for: unwatchedChannel) == .unknown)
 
         await service.refreshAll()
@@ -620,8 +621,8 @@ struct StreamMonitorServiceTests {
         #expect(fetched.contains { $0.contains("@first") })
         #expect(fetched.contains { $0.contains("@second") })
 
-        let firstStatus = service.status(for: WatchedChannel(id: "@first", name: "First Channel", handle: "@first"))
-        let secondStatus = service.status(for: WatchedChannel(id: "@second", name: "Second Channel", handle: "@second"))
+        let firstStatus = service.status(for: WatchedChannel(id: "youtube:@first", name: "First Channel", handle: "@first"))
+        let secondStatus = service.status(for: WatchedChannel(id: "youtube:@second", name: "Second Channel", handle: "@second"))
 
         if case .live(let vid1, _, _) = firstStatus {
             #expect(vid1 == "vid_first")
@@ -661,7 +662,7 @@ struct StreamMonitorServiceTests {
 
         await service.refreshAll()
 
-        let channel = channelStore.channels.first { $0.id == "@live_vtuber" }
+        let channel = channelStore.channels.first { $0.id == "youtube:@live_vtuber" }
         #expect(channel?.avatarURL?.absoluteString == "https://yt3.ggpht.com/live_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj")
     }
 
@@ -688,7 +689,7 @@ struct StreamMonitorServiceTests {
 
         await service.refreshAll()
 
-        let channel = channelStore.channels.first { $0.id == "@upcoming_vtuber" }
+        let channel = channelStore.channels.first { $0.id == "youtube:@upcoming_vtuber" }
         #expect(channel?.avatarURL?.absoluteString == "https://yt3.ggpht.com/upcoming_vtuber_avatar=s88-c-k-c0x00ffffff-no-rj")
     }
 
@@ -718,8 +719,8 @@ struct StreamMonitorServiceTests {
 
         #expect(spySnapshotStore.writeCount == 1)
         if let lastWrite = spySnapshotStore.lastWrite {
-            #expect(lastWrite.channels.contains { $0.id == "@bukancaitlyn" })
-            if case .live(let vid, let title, _) = lastWrite.statuses["@bukancaitlyn"] {
+            #expect(lastWrite.channels.contains { $0.id == "youtube:@bukancaitlyn" })
+            if case .live(let vid, let title, _) = lastWrite.statuses["youtube:@bukancaitlyn"] {
                 #expect(vid == "vid_123")
                 #expect(title == "Singing")
             } else {
@@ -733,7 +734,7 @@ struct StreamMonitorServiceTests {
 
         #expect(spySnapshotStore.writeCount == 2)
         if let secondWrite = spySnapshotStore.lastWrite {
-            if case .offline = secondWrite.statuses["@bukancaitlyn"] {
+            if case .offline = secondWrite.statuses["youtube:@bukancaitlyn"] {
                 // Expected offline status
             } else {
                 Issue.record("Expected .offline stream status in snapshot after transition")
@@ -769,7 +770,7 @@ struct StreamMonitorServiceTests {
 
         #expect(spySnapshotStore.writeCount == 1)
         if let lastWrite = spySnapshotStore.lastWrite {
-            let channel = lastWrite.channels.first { $0.id == "@bukancaitlyn" }
+            let channel = lastWrite.channels.first { $0.id == "youtube:@bukancaitlyn" }
             #expect(channel?.name == "Updated Caitlyn Name")
             #expect(channel?.avatarURL?.absoluteString == "https://yt3.googleusercontent.com/avatar123=s800")
         }
@@ -806,7 +807,7 @@ struct StreamMonitorServiceTests {
 
     @Test @MainActor func testEmptyWatchlistExportsEmptySnapshot() async {
         let channelStore = ChannelStore(userDefaults: makeTestDefaults())
-        channelStore.removeChannel(id: "@bukancaitlyn")
+        channelStore.removeChannel(id: "youtube:@bukancaitlyn")
         #expect(channelStore.channels.isEmpty)
 
         let prefs = PreferencesStore(userDefaults: makeTestDefaults())
@@ -910,5 +911,92 @@ struct StreamMonitorServiceTests {
         await monitor.refreshAll()
         #expect(mockCenter.requests.isEmpty)
         #expect(prefs.settings.lastNotifiedDevBirthdayYear == nil)
+    }
+
+    @Test @MainActor func testMixedYouTubeAndTwitchRefreshDispatchesCorrectEndpointsAndNotifies() async throws {
+        let defaults = makeTestDefaults()
+        let channelStore = ChannelStore(userDefaults: defaults)
+        let twitchChannel = channelStore.addChannel(platform: .twitch, handle: "ironmouse", name: "Ironmouse")
+        #expect(twitchChannel != nil)
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        prefs.settings.notifyOnLive = true
+        let mockCenter = MockNotificationCenter()
+        let mockNotifier = NotificationService(center: mockCenter)
+        let spySnapshot = SpyWidgetSnapshotStore()
+
+        let fetchedURLs = ValueBox<[URL]>([])
+
+        let httpFetcher: HTTPFetcher = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            fetchedURLs.set(fetchedURLs.get() + [url])
+
+            if url.host == "gql.twitch.tv" {
+                let twitchJSON = """
+                {
+                  "data": {
+                    "user": {
+                      "id": "12345",
+                      "login": "ironmouse",
+                      "displayName": "Ironmouse",
+                      "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/avatar.png",
+                      "stream": {
+                        "id": "stream999",
+                        "title": "Cooking with Friends",
+                        "createdAt": "2026-11-12T20:00:00Z",
+                        "type": "live"
+                      }
+                    }
+                  }
+                }
+                """.data(using: .utf8)!
+                return (twitchJSON, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!)
+            } else {
+                let ytHTML = makeLiveHTML(videoId: "yt123", channelTitle: "Caitlyn Momochi", streamTitle: "Caitlyn Live")
+                return (ytHTML, make200Response(url: url))
+            }
+        }
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: mockNotifier,
+            httpFetcher: httpFetcher,
+            snapshotStore: spySnapshot
+        )
+
+        await service.refreshAll()
+
+        let urls = fetchedURLs.get()
+        #expect(urls.contains { $0.host == "gql.twitch.tv" })
+        #expect(urls.contains { $0.absoluteString.contains("youtube.com") && $0.absoluteString.contains("@bukancaitlyn") })
+
+        #expect(service.statuses["youtube:@bukancaitlyn"] != nil)
+        if case .live(let vid, let title, _) = service.statuses["youtube:@bukancaitlyn"] {
+            #expect(vid == "yt123")
+            #expect(title == "Caitlyn Live")
+        } else {
+            Issue.record("Expected youtube:@bukancaitlyn to be live")
+        }
+
+        #expect(service.statuses["twitch:ironmouse"] != nil)
+        if case .live(let vid, let title, _) = service.statuses["twitch:ironmouse"] {
+            #expect(vid == "stream999")
+            #expect(title == "Cooking with Friends")
+        } else {
+            Issue.record("Expected twitch:ironmouse to be live")
+        }
+
+        #expect(mockNotifier.liveNotificationCount == 2)
+        #expect(mockCenter.requests.count == 2)
+        let twitchReq = mockCenter.requests.first { ($0.content.userInfo["platform"] as? String) == "twitch" }
+        let unwrappedTwitchReq = try #require(twitchReq)
+        #expect(unwrappedTwitchReq.content.userInfo["watchURL"] as? String == "https://www.twitch.tv/ironmouse")
+
+        #expect(spySnapshot.writeCount >= 1)
+        let lastWrite = try #require(spySnapshot.lastWrite)
+        #expect(lastWrite.channels.count == 2)
+        #expect(lastWrite.statuses["youtube:@bukancaitlyn"] != nil)
+        #expect(lastWrite.statuses["twitch:ironmouse"] != nil)
     }
 }

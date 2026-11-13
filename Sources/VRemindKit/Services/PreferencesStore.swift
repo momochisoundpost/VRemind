@@ -1,4 +1,9 @@
 import Foundation
+import VRemindCore
+
+private struct SendableUserDefaults: @unchecked Sendable {
+    let defaults: UserDefaults
+}
 
 @MainActor
 public final class PreferencesStore: ObservableObject {
@@ -10,10 +15,11 @@ public final class PreferencesStore: ObservableObject {
         }
     }
 
-    private let userDefaults: UserDefaults
+    private let storage: SendableUserDefaults
+    private var userDefaults: UserDefaults { storage.defaults }
 
     public init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+        self.storage = SendableUserDefaults(defaults: userDefaults)
         if let data = userDefaults.data(forKey: Self.userDefaultsKey),
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
             // AppSettings decodes backward-compatibly, defaulting updateConsent to .undecided
@@ -35,6 +41,23 @@ public final class PreferencesStore: ObservableObject {
     private func save() {
         if let data = try? JSONEncoder().encode(settings) {
             userDefaults.set(data, forKey: Self.userDefaultsKey)
+        }
+    }
+}
+
+extension PreferencesStore: SettingsStorage, @unchecked Sendable {
+    public nonisolated func loadSettings() throws -> AppSettings {
+        guard let data = storage.defaults.data(forKey: Self.userDefaultsKey) else {
+            return AppSettings()
+        }
+        return try JSONDecoder().decode(AppSettings.self, from: data)
+    }
+
+    public nonisolated func saveSettings(_ settings: AppSettings) throws {
+        let data = try JSONEncoder().encode(settings)
+        storage.defaults.set(data, forKey: Self.userDefaultsKey)
+        Task { @MainActor in
+            self.settings = settings
         }
     }
 }

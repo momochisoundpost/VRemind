@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VRemindCore
 @testable import VRemindKit
 
 struct LinkOpenerTests {
@@ -76,5 +77,34 @@ struct LinkOpenerTests {
 
         let noHostTarget = URL(string: "vremind://open-stream?url=https://")!
         #expect(LinkOpener.parseStreamDeepLink(noHostTarget) == nil)
+    }
+
+    @Test func testStreamURLForTwitch() {
+        let twitchChannel = WatchedChannel(
+            id: "twitch:ironmouse",
+            platform: .twitch,
+            name: "Ironmouse",
+            handle: "ironmouse"
+        )
+        let liveStatus = StreamStatus.live(videoId: "stream123", title: "Live", startedAt: Date())
+        let url = LinkOpener.streamURL(for: twitchChannel, status: liveStatus)
+        #expect(url.absoluteString == "https://www.twitch.tv/ironmouse")
+    }
+
+    @Test func testStreamURLForYouTube() {
+        let youtubeChannel = WatchedChannel(
+            id: "youtube:@bukancaitlyn",
+            platform: .youtube,
+            name: "Caitlyn Momochi",
+            handle: "@bukancaitlyn"
+        )
+        let liveStatus = StreamStatus.live(videoId: "abc", title: "Live", startedAt: Date())
+        let url = LinkOpener.streamURL(for: youtubeChannel, status: liveStatus)
+        #expect(url.absoluteString == "https://www.youtube.com/watch?v=abc")
+    }
+
+    @Test func testChannelURLForPlatforms() {
+        #expect(LinkOpener.channelURL(for: .twitch, handle: "ironmouse") == URL(string: "https://www.twitch.tv/ironmouse")!)
+        #expect(LinkOpener.channelURL(for: .youtube, handle: "@bukancaitlyn") == URL(string: "https://www.youtube.com/@bukancaitlyn")!)
     }
 }
