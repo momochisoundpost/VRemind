@@ -227,7 +227,7 @@ public struct MenuBarStatusView: View {
     public let onQuit: () -> Void
 
     public static func shouldFlashStatusButton(isAnyLive: Bool, reduceMotion: Bool) -> Bool {
-        isAnyLive && !reduceMotion
+        false
     }
 
     public init(
@@ -417,15 +417,13 @@ public struct MenuBarStatusView: View {
         isLive: Bool,
         flashPhase: Bool = false
     ) {
-        let symbolName = isLive
-            ? (flashPhase ? "antenna.radiowaves.left.and.right" : "dot.radiowaves.left.and.right")
-            : "antenna.radiowaves.left.and.right"
+        let symbolName = "antenna.radiowaves.left.and.right"
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
         if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VRemind")?.withSymbolConfiguration(config) {
             image.isTemplate = !isLive
             button.image = image
         }
-        button.contentTintColor = isLive ? (flashPhase ? .systemRed : NSColor(red: 0.95, green: 0.25, blue: 0.25, alpha: 0.55)) : nil
+        button.contentTintColor = isLive ? .systemRed : nil
         button.toolTip = isLive ? "VRemind (Live now)" : "VRemind"
     }
 

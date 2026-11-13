@@ -17,8 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var latestAvailableRelease: GitHubRelease?
 
     private var cancellables = Set<AnyCancellable>()
-    private var flashTimer: Timer?
-    private var flashPhase: Bool = false
 
     override nonisolated init() {
         super.init()
@@ -56,8 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        flashTimer?.invalidate()
-        flashTimer = nil
         stopPeriodicUpdateChecks()
         monitorService?.stopPolling()
     }
@@ -270,38 +266,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateStatusButton() {
         guard let button = statusItem?.button else { return }
-        let isAnyLive = monitorService.isAnyLive
-        let shouldFlash = MenuBarStatusView.shouldFlashStatusButton(
-            isAnyLive: isAnyLive,
-            reduceMotion: preferencesStore.settings.reduceMotion
-        )
-
-        if isAnyLive {
-            if shouldFlash {
-                if flashTimer == nil {
-                    flashPhase = true
-                    flashTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            self.flashPhase.toggle()
-                            if let btn = self.statusItem?.button {
-                                MenuBarStatusView.configureStatusButton(btn, isLive: true, flashPhase: self.flashPhase)
-                            }
-                        }
-                    }
-                }
-                MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: flashPhase)
-            } else {
-                flashTimer?.invalidate()
-                flashTimer = nil
-                flashPhase = true
-                MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: true)
-            }
-        } else {
-            flashTimer?.invalidate()
-            flashTimer = nil
-            flashPhase = false
-            MenuBarStatusView.configureStatusButton(button, isLive: false)
-        }
+        MenuBarStatusView.configureStatusButton(button, isLive: monitorService.isAnyLive)
     }
 }

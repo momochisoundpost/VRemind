@@ -356,7 +356,7 @@ struct MenuBarViewTests {
     }
 
     @Test @MainActor func testCelebrationViewModelHelpersAndStatusButtonFlashRule() async {
-        #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: true, reduceMotion: false) == true)
+        #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: true, reduceMotion: false) == false)
         #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: true, reduceMotion: true) == false)
         #expect(MenuBarStatusView.shouldFlashStatusButton(isAnyLive: false, reduceMotion: false) == false)
 

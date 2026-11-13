@@ -187,7 +187,7 @@ public struct PreferencesView: View {
                 .toggleStyle(.checkbox)
 
                 Toggle(
-                    "Reduce Motion (Turn off flashing & popover confetti)",
+                    "Reduce Motion (Turn off popover confetti & slow rainbow)",
                     isOn: $preferencesStore.settings.reduceMotion
                 )
                 .toggleStyle(.checkbox)
