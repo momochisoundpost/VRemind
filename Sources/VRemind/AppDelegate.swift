@@ -48,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusButton()
 
         monitorService.startPolling()
+        Task { [weak self] in
+            await self?.monitorService.checkDeveloperBirthdayNotificationIfNeeded()
+        }
 
         showOnboardingIfNeeded()
     }
@@ -254,26 +257,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
+
+        preferencesStore.$settings
+            .map(\.reduceMotion)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateStatusButton()
+            }
+            .store(in: &cancellables)
     }
 
     private func updateStatusButton() {
         guard let button = statusItem?.button else { return }
         let isAnyLive = monitorService.isAnyLive
+        let shouldFlash = MenuBarStatusView.shouldFlashStatusButton(
+            isAnyLive: isAnyLive,
+            reduceMotion: preferencesStore.settings.reduceMotion
+        )
 
         if isAnyLive {
-            if flashTimer == nil {
-                flashPhase = true
-                flashTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        self.flashPhase.toggle()
-                        if let btn = self.statusItem?.button {
-                            MenuBarStatusView.configureStatusButton(btn, isLive: true, flashPhase: self.flashPhase)
+            if shouldFlash {
+                if flashTimer == nil {
+                    flashPhase = true
+                    flashTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            self.flashPhase.toggle()
+                            if let btn = self.statusItem?.button {
+                                MenuBarStatusView.configureStatusButton(btn, isLive: true, flashPhase: self.flashPhase)
+                            }
                         }
                     }
                 }
+                MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: flashPhase)
+            } else {
+                flashTimer?.invalidate()
+                flashTimer = nil
+                flashPhase = true
+                MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: true)
             }
-            MenuBarStatusView.configureStatusButton(button, isLive: true, flashPhase: flashPhase)
         } else {
             flashTimer?.invalidate()
             flashTimer = nil
