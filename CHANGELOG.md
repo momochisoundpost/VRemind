@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2] - 2026-11-12
+
+### Release Notes
+**生日SANG NYIT** — *wish your mom a happy birthday and buy something nice to her.*
+
+I forgot my old boss' birthday, so for that moron I implemented the party update. Also, we heard you like updates, so we updated the updater so you can read about updates while updating to the latest update.
+
+### Highlights & What's New
+
+#### 🎉 Celebration Mode (Multilingual Milestone Detection)
+- **EN / ID / JA Keyword Detection:** VRemind now scans scraped YouTube stream titles for birthday, debut, re-debut, and anniversary milestones across:
+  - **English:** `birthday`, `bday`, `birthday stream`, `debut`, `re-debut`, `anniversary`
+  - **Indonesian:** `ultah`, `ulang tahun`, `hari jadi`, `anniv`
+  - **Japanese:** `生誕祭`, `誕生日`, `バースデー`, `初配信`, `お披露目`, `周年`, `記念配信`, `記念枠`
+- **Rainbow Status Accents:** Celebrating **LIVE NOW** and **UPCOMING** badges, section headers, and elapsed/start-time labels shift from standard red and orange into an animated rainbow gradient.
+- **Non-Metal Popover Confetti:** When a milestone stream is live or airing today, opening the menu bar popover rains party confetti across the window. Built with pure CPU-drawn SwiftUI `Canvas` and `TimelineView` so it runs smoothly on non-Metal GPUs and legacy Hackintoshes from **macOS 12 Monterey** upward, with zero idle CPU usage when the popover is closed.
+
+#### ♿ Reduce Motion Preference
+- Added a **Reduce Motion** toggle under **Preferences → General** that stops the flashing menu bar live icon, disables popover confetti rain, and tones down rainbow gradients to a gentle, slower shift.
+
+#### ✨ Upgraded Software Updater (`MarkdownView`)
+- **Yo Dawg, We Updated the Updater:** Replaced the raw `#` and `<img>` wall of text in the **Software Update Available** dialog with a native, zero-dependency macOS 12 Markdown renderer supporting headings, bullet lists, code blocks, inline formatting, and embedded GitHub Release screenshots.
+
+---
+
 ## [1.1] - 2026-11-12
 
 ### Release Notes
