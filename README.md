@@ -14,6 +14,9 @@
 
 A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero third-party dependencies.
 
+> [!TIP]
+> **Looking for Windows?** Check out [**VRemind for Windows (`VRemind-win`)**](https://github.com/momochisoundpost/VRemind-win) — a native **WinUI 3** system tray port for **Windows 10 (1809 LTSC+) & Windows 11** powered by the exact same `VRemindCore` engine with 100% base app feature parity!
+
 > [!NOTE]
 > **Maintenance Mode:** With [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore) and `VRemind` now cleanly separated, **VRemind is entering maintenance mode** — future updates will focus on syncing `VRemindCore` and fixing upstream breakage (mostly because YouTube keeps changing things to keep their product managers employed). No new features are planned unless someone contributes one via PR or manages to scrape **Kick.com** without API keys.
 
@@ -154,7 +157,8 @@ open build/VRemind.app
 ## Frequently Asked Questions (FAQ)
 
 ### Is there a Windows or Linux build?
-**The macOS app is 100% Mac-native — and the engine now lives in its own portable repo.** VRemind itself is built on Mac, for macOS, in native Swift, SwiftUI, and AppKit with zero third-party dependencies. Starting with **1.3 ("Better Together")**, the platform-agnostic business engine ([`VRemindCore`](https://github.com/momochisoundpost/VRemindCore)) is split into its own Swift package repository using only `Foundation` and `FoundationNetworking` — so it can run anywhere Swift runs (Linux, Windows, Googlebooks, or as a blueprint for KDE Plasma / GNOME ports). Check [`momochisoundpost/VRemindCore`](https://github.com/momochisoundpost/VRemindCore) if you want to build on top of it or port it!
+- **Windows — Yes!** [**`VRemind-win`**](https://github.com/momochisoundpost/VRemind-win) is officially out for **Windows 10 (1809 LTSC and newer) & Windows 11 (x64)** as a native unpackaged **WinUI 3** system tray app — zero Electron, zero WebView2. It snaps the exact same [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore) engine into Windows via a drop-in companion CLI (`vremind-core.exe`) and already hits **100% feature parity on the main tray app** (YouTube & Twitch tracking, onboarding, 3-tab Settings, portable macOS-compatible JSON backup/restore, DirectX 10 hardware-accelerated celebration mode, 1809-compatible toast notifications, and the native Markdown/video updater). *(Windows 11 desktop widgets are still being figured out separately!)*
+- **Linux — Not officially yet, but `VRemindCore` is ready.** Starting with **1.3 ("Better Together")**, the platform-agnostic business engine ([`VRemindCore`](https://github.com/momochisoundpost/VRemindCore)) lives in its own Swift package repository using only `Foundation` and `FoundationNetworking` — so it can run anywhere Swift runs as a clean blueprint for KDE Plasma, GNOME, or Linux tray ports. Check [`momochisoundpost/VRemindCore`](https://github.com/momochisoundpost/VRemindCore) if you want to build on top of it!
 
 ### Why are you still supporting macOS 12 Monterey?
 Because I love the glowing Apple logo MacBook users! My very first long-form video was installing macOS Monterey on an early 2008 MacBook using OpenCore Legacy Patcher (OCLP)—so you already know what it leads to. Classic Intel Macs and OCLP-patched machines deserve great lightweight native software too, so VRemind was built from day one to run natively and smoothly on Monterey 12.0+ without sacrificing modern Swift concurrency or features.
