@@ -5,7 +5,9 @@
 ### Release Notes
 **The "Genuine eBay Battery (Service Recommended)" Update**
 
-Windows ([`VRemind-win`](https://github.com/momochisoundpost/VRemind-win)) was supposed to be a second-class citizen port, and I genuinely don't know how or why it ended up better than the original Mac app. So much for "maintenance mode" — I had to backport the cleaner hover-only trash icon and drag-to-reorder straight from the Windows port back into macOS, all without touching a single line of `VRemindCore`.
+> **Why `1.3.3` instead of `1.3.2`?** Because [`VRemind-win`](https://github.com/momochisoundpost/VRemind-win) was supposed to be a second-class citizen port, somehow ended up better than the original Mac app, and I refused to get outpaced on my own app — so I skipped `1.3.2` completely just to chase it even harder. *(Yes, right after `1.3` was a version number late to Minecraft's "Better Together" joke, I still cannot count normally.)*
+
+So much for "maintenance mode." Windows ([`VRemind-win`](https://github.com/momochisoundpost/VRemind-win)) was supposed to be a second-class citizen port, and I genuinely don't know how or why it ended up better than the original Mac app — so here we are backporting the cleaner hover-only trash icon and drag-to-reorder straight from Windows back into macOS, all without touching a single line of `VRemindCore`.
 
 Anyways, we are doing good — especially on crappy laptops running on a "Genuine" eBay replacement battery permanently stuck on `Service Recommended` status — because we went full sicko mode optimizing background power usage and putting VRemind at the absolute bottom of the Darwin kernel food chain when idle.
 
