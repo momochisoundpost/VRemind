@@ -573,4 +573,21 @@ struct MenuBarViewTests {
         #expect(viewModel.shouldAnimatePopoverEffects == false)
         #expect(viewModel.isPopoverConfettiActive(date: now) == false)
     }
+
+    @Test @MainActor func testChannelRowHoverDeleteVisibilityAndDragSuppression() {
+        #expect(ChannelRowView.shouldShowDeleteButton(isHovered: false, isDraggingAnyRow: false) == false)
+        #expect(ChannelRowView.shouldShowDeleteButton(isHovered: true, isDraggingAnyRow: false) == true)
+        #expect(ChannelRowView.shouldShowDeleteButton(isHovered: true, isDraggingAnyRow: true) == false)
+
+        let channel = WatchedChannel(id: "youtube:@test", platform: .youtube, name: "Test", handle: "@test")
+        let row = ChannelRowView(
+            channel: channel,
+            status: .offline(lastStreamedAt: nil),
+            isDraggingAnyRow: true,
+            shouldSuppressTap: { true },
+            onDelete: {}
+        )
+        let host = NSHostingController(rootView: row)
+        _ = host.view
+    }
 }

@@ -310,12 +310,33 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 }
 
+private struct ActiveSectionDrag: Equatable {
+    let kind: SectionKind
+    let draggedId: String
+    var step: DragLayoutStep
+}
+
+private struct SectionRowHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 // MARK: - MenuBarStatusView
 
 public struct MenuBarStatusView: View {
+    private static let sectionRowSpacing: CGFloat = 4
+    private static let fallbackRowHeight: CGFloat = 46
+
     @ObservedObject public var viewModel: MenuBarStatusViewModel
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
+
+    @State private var activeDrag: ActiveSectionDrag? = nil
+    @State private var rowHeightsBySection: [SectionKind: [String: CGFloat]] = [:]
+    @State private var suppressTapUntil: Date = .distantPast
 
     public static func shouldFlashStatusButton(isAnyLive: Bool, reduceMotion: Bool) -> Bool {
         false
@@ -346,6 +367,11 @@ public struct MenuBarStatusView: View {
             }
         }
         .frame(width: 360, height: 440)
+        .onChange(of: viewModel.isPopoverVisible) { isVisible in
+            if !isVisible {
+                activeDrag = nil
+            }
+        }
     }
 
     private var headerView: some View {
@@ -424,6 +450,7 @@ public struct MenuBarStatusView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if !sections.live.isEmpty {
                         sectionBlock(
+                            kind: .live,
                             title: "LIVE NOW",
                             count: sections.live.count,
                             color: Theme.live,
@@ -433,6 +460,7 @@ public struct MenuBarStatusView: View {
 
                     if !sections.upcoming.isEmpty {
                         sectionBlock(
+                            kind: .upcoming,
                             title: "UPCOMING",
                             count: sections.upcoming.count,
                             color: .orange,
@@ -442,6 +470,7 @@ public struct MenuBarStatusView: View {
 
                     if !sections.offline.isEmpty {
                         sectionBlock(
+                            kind: .offline,
                             title: "OFFLINE",
                             count: sections.offline.count,
                             color: .secondary,
@@ -455,6 +484,7 @@ public struct MenuBarStatusView: View {
     }
 
     private func sectionBlock(
+        kind: SectionKind,
         title: String,
         count: Int,
         color: Color,
@@ -462,7 +492,7 @@ public struct MenuBarStatusView: View {
     ) -> some View {
         let reduceMotion = viewModel.areAnimationsPaused
         let animate = viewModel.shouldAnimatePopoverEffects
-        let isCelebrating = (title == "LIVE NOW" || title == "UPCOMING") && viewModel.isSectionCelebrating(channels)
+        let isCelebrating = (kind == .live || kind == .upcoming) && viewModel.isSectionCelebrating(channels)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -480,18 +510,181 @@ public struct MenuBarStatusView: View {
             .padding(.horizontal, 12)
             .padding(.top, 4)
 
-            ForEach(channels) { channel in
-                ChannelRowView(
-                    channel: channel,
-                    status: viewModel.monitorService.status(for: channel),
-                    animate: animate,
-                    reduceMotion: reduceMotion,
-                    onDelete: {
-                        viewModel.removeChannel(id: channel.id)
+            VStack(alignment: .leading, spacing: Self.sectionRowSpacing) {
+                ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
+                    sectionRowView(
+                        kind: kind,
+                        index: index,
+                        channel: channel,
+                        channels: channels,
+                        animate: animate,
+                        reduceMotion: reduceMotion
+                    )
+                }
+            }
+            .coordinateSpace(name: sectionCoordinateSpaceName(for: kind))
+            .onPreferenceChange(SectionRowHeightPreferenceKey.self) { heights in
+                var current = rowHeightsBySection[kind] ?? [:]
+                var changed = false
+                for (id, height) in heights where height > 0 {
+                    if abs((current[id] ?? 0) - height) > 0.5 {
+                        current[id] = height
+                        changed = true
                     }
-                )
+                }
+                if changed {
+                    rowHeightsBySection[kind] = current
+                }
             }
         }
+    }
+
+    private func sectionRowView(
+        kind: SectionKind,
+        index: Int,
+        channel: WatchedChannel,
+        channels: [WatchedChannel],
+        animate: Bool,
+        reduceMotion: Bool
+    ) -> some View {
+        let isDragged = isDraggedRow(kind: kind, channelId: channel.id)
+        let rowAnimation: Animation? = (isDragged || reduceMotion || activeDrag == nil)
+            ? nil
+            : .interactiveSpring(response: 0.22, dampingFraction: 0.86)
+        let targetIndexInSection = activeDrag?.kind == kind ? activeDrag?.step.targetIndex : nil
+
+        let row = ChannelRowView(
+            channel: channel,
+            status: viewModel.monitorService.status(for: channel),
+            animate: animate,
+            reduceMotion: reduceMotion,
+            isDraggingAnyRow: activeDrag != nil,
+            shouldSuppressTap: { Date() < suppressTapUntil },
+            onDelete: {
+                viewModel.removeChannel(id: channel.id)
+            }
+        )
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: SectionRowHeightPreferenceKey.self,
+                    value: [channel.id: proxy.size.height]
+                )
+            }
+        )
+        .offset(y: rowOffset(kind: kind, index: index, channelCount: channels.count))
+        .zIndex(isDragged ? 10 : 0)
+        .opacity(isDragged ? 0.92 : 1.0)
+        .animation(rowAnimation, value: targetIndexInSection)
+
+        return withSectionDragGesture(
+            row,
+            enabled: channels.count >= 2,
+            kind: kind,
+            channel: channel,
+            channels: channels
+        )
+    }
+
+    @ViewBuilder
+    private func withSectionDragGesture<Row: View>(
+        _ row: Row,
+        enabled: Bool,
+        kind: SectionKind,
+        channel: WatchedChannel,
+        channels: [WatchedChannel]
+    ) -> some View {
+        if enabled {
+            row.simultaneousGesture(
+                sectionDragGesture(kind: kind, channel: channel, channels: channels)
+            )
+        } else {
+            row
+        }
+    }
+
+    private func sectionDragGesture(
+        kind: SectionKind,
+        channel: WatchedChannel,
+        channels: [WatchedChannel]
+    ) -> some Gesture {
+        DragGesture(
+            minimumDistance: ChannelOrderPolicy.dragActivationThreshold,
+            coordinateSpace: .named(sectionCoordinateSpaceName(for: kind))
+        )
+        .onChanged { value in
+            if let current = activeDrag, (current.kind != kind || current.draggedId != channel.id) {
+                return
+            }
+
+            let deltaY = value.translation.height
+            if activeDrag == nil {
+                guard ChannelOrderPolicy.exceedsDragThreshold(deltaY) else { return }
+            }
+
+            guard let currentIndex = channels.firstIndex(where: { $0.id == channel.id }) else {
+                activeDrag = nil
+                return
+            }
+
+            let step = ChannelOrderPolicy.calculateDragLayout(
+                draggedIndex: currentIndex,
+                deltaY: deltaY,
+                itemHeights: measuredHeights(for: kind, channels: channels),
+                itemSpacing: Self.sectionRowSpacing
+            )
+            activeDrag = ActiveSectionDrag(kind: kind, draggedId: channel.id, step: step)
+        }
+        .onEnded { value in
+            guard let current = activeDrag, current.kind == kind, current.draggedId == channel.id else {
+                return
+            }
+
+            // Block any synthetic button click fired right as the mouse releases a drag.
+            suppressTapUntil = Date().addingTimeInterval(0.2)
+
+            let fromIndex = channels.firstIndex(where: { $0.id == channel.id })
+            let targetIndex: Int?
+            if let fromIndex {
+                targetIndex = ChannelOrderPolicy.calculateDragLayout(
+                    draggedIndex: fromIndex,
+                    deltaY: value.translation.height,
+                    itemHeights: measuredHeights(for: kind, channels: channels),
+                    itemSpacing: Self.sectionRowSpacing
+                ).targetIndex
+            } else {
+                targetIndex = nil
+            }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                activeDrag = nil
+                if let fromIndex, let targetIndex, targetIndex != fromIndex {
+                    viewModel.reorderSection(kind, fromIndex: fromIndex, toIndex: targetIndex)
+                }
+            }
+        }
+    }
+
+    private func sectionCoordinateSpaceName(for kind: SectionKind) -> String {
+        "section-\(kind.rawValue)"
+    }
+
+    private func isDraggedRow(kind: SectionKind, channelId: String) -> Bool {
+        activeDrag?.kind == kind && activeDrag?.draggedId == channelId
+    }
+
+    private func rowOffset(kind: SectionKind, index: Int, channelCount: Int) -> CGFloat {
+        guard let activeDrag, activeDrag.kind == kind else { return 0 }
+        let translates = activeDrag.step.itemTranslateY
+        guard index >= 0, index < channelCount, index < translates.count else { return 0 }
+        return translates[index]
+    }
+
+    private func measuredHeights(for kind: SectionKind, channels: [WatchedChannel]) -> [CGFloat] {
+        let cached = rowHeightsBySection[kind] ?? [:]
+        return channels.map { cached[$0.id] ?? Self.fallbackRowHeight }
     }
 
     // MARK: - Static Helpers
