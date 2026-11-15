@@ -278,4 +278,38 @@ struct UpdateServiceTests {
         #expect(decoded.htmlURL == release.htmlURL)
         #expect(decoded.assets == release.assets)
     }
+
+    @Test @MainActor func automaticUpdateCheckSkipsInLowPowerModeWhileManualProceeds() async {
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        prefs.settings.updateConsent = .allowed
+
+        var fetchCount = 0
+        let service = UpdateService(
+            preferencesStore: prefs,
+            currentVersion: "1.0.0",
+            fetchRelease: {
+                fetchCount += 1
+                return GitHubRelease(
+                    tagName: "v1.1.0",
+                    name: "1.1.0",
+                    body: "Notes",
+                    htmlURL: URL(string: "https://github.com/momochisoundpost/VRemind/releases/tag/v1.1.0")!
+                )
+            }
+        )
+
+        // Automatic check in Low Power Mode is deferred without hitting network
+        let autoResult = await service.checkForUpdates(manual: false, isLowPowerModeEnabled: true)
+        #expect(fetchCount == 0)
+        #expect(autoResult == .skippedNotConsented)
+
+        // Manual check in Low Power Mode still proceeds
+        let manualResult = await service.checkForUpdates(manual: true, isLowPowerModeEnabled: true)
+        #expect(fetchCount == 1)
+        if case .updateAvailable(let release) = manualResult {
+            #expect(release.tagName == "v1.1.0")
+        } else {
+            Issue.record("Expected .updateAvailable on manual check")
+        }
+    }
 }

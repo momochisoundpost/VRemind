@@ -290,4 +290,37 @@ struct WidgetSnapshotStoreTests {
         )
         #expect(widgetURL.path.hasSuffix("Library/Application Support/VRemind"))
     }
+
+    // MARK: - Test 8: Skip Disk Write & Timeline Reload When Unchanged
+
+    @Test func writeSnapshotSkipsDiskWriteAndTimelineReloadWhenUnchanged() async throws {
+        let tempDir = try createTemporaryDirectory()
+        defer { removeTemporaryDirectory(tempDir) }
+
+        let reloadCounter = Counter()
+        let store = WidgetSnapshotStore(
+            directoryURL: tempDir,
+            timelineReloader: { reloadCounter.increment() }
+        )
+
+        let channel = WatchedChannel(id: "youtube:@bukancaitlyn", name: "Caitlyn", handle: "@bukancaitlyn")
+        let liveDate = Date(timeIntervalSince1970: 1_731_401_000)
+        let statuses: [String: StreamStatus] = [
+            channel.id: .live(videoId: "v1", title: "Stream", startedAt: liveDate)
+        ]
+
+        try await store.writeSnapshot(channels: [channel], statuses: statuses)
+        #expect(reloadCounter.value == 1)
+
+        // Second identical write -> skipped, reloadCounter stays 1
+        try await store.writeSnapshot(channels: [channel], statuses: statuses)
+        #expect(reloadCounter.value == 1)
+
+        // Changed stream title -> writes and reloads
+        let updatedStatuses: [String: StreamStatus] = [
+            channel.id: .live(videoId: "v1", title: "New Title", startedAt: liveDate)
+        ]
+        try await store.writeSnapshot(channels: [channel], statuses: updatedStatuses)
+        #expect(reloadCounter.value == 2)
+    }
 }

@@ -25,6 +25,15 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
     private let urlSession: URLSession
     private let timelineReloader: (@Sendable () -> Void)?
 
+    public static let defaultURLSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.networkServiceType = .background
+        configuration.timeoutIntervalForRequest = 15
+        return URLSession(configuration: configuration)
+    }()
+
     public static let defaultTimelineReloader: (@Sendable () -> Void)? = {
         #if canImport(WidgetKit)
         return {
@@ -40,7 +49,7 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
     public init(
         directoryURL: URL? = nil,
         fileManager: FileManager = .default,
-        urlSession: URLSession = .shared,
+        urlSession: URLSession = defaultURLSession,
         timelineReloader: (@Sendable () -> Void)? = defaultTimelineReloader
     ) {
         let base = directoryURL ?? Self.resolveDefaultDirectoryURL(fileManager: fileManager)
@@ -101,6 +110,7 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
         // Map domain channels and statuses into widget items
         var items: [WidgetChannelItem] = []
         items.reserveCapacity(channels.count)
+        var didWriteAnyAvatar = false
 
         for channel in channels {
             let status = statuses[channel.id]
@@ -115,7 +125,9 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
             var avatarFilename: String? = nil
             if let avatarURL = channel.avatarURL {
                 avatarFilename = candidateFilename
-                await cacheAvatarIfNeeded(from: avatarURL, to: avatarDestinationURL)
+                if await cacheAvatarIfNeeded(from: avatarURL, to: avatarDestinationURL) {
+                    didWriteAnyAvatar = true
+                }
             } else if fileManager.fileExists(atPath: avatarDestinationURL.path) {
                 avatarFilename = candidateFilename
             }
@@ -126,6 +138,13 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
 
         // Sort items so primary channel is spotlighted first
         let sorted = Self.sortChannels(items)
+
+        if fileManager.fileExists(atPath: cacheFileURL.path),
+           !didWriteAnyAvatar,
+           readSnapshot()?.channels == sorted {
+            return
+        }
+
         let snapshot = WidgetSnapshot(generatedAt: Date(), channels: sorted)
 
         // Write atomically
@@ -153,9 +172,10 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
 
     // MARK: - Avatar Caching Helper
 
-    private func cacheAvatarIfNeeded(from sourceURL: URL, to destinationURL: URL) async {
+    @discardableResult
+    private func cacheAvatarIfNeeded(from sourceURL: URL, to destinationURL: URL) async -> Bool {
         guard !fileManager.fileExists(atPath: destinationURL.path) else {
-            return
+            return false
         }
 
         do {
@@ -165,15 +185,17 @@ public final class WidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked 
             } else {
                 let (downloadedData, response) = try await urlSession.data(from: sourceURL)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                    return
+                    return false
                 }
                 data = downloadedData
             }
 
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else { return false }
             try data.write(to: destinationURL, options: .atomic)
+            return true
         } catch {
             // Caching is best-effort and must not fail snapshot writing
+            return false
         }
     }
 

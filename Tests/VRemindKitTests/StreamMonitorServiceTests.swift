@@ -131,6 +131,27 @@ final class ValueBox<T>: @unchecked Sendable {
     }
 }
 
+final class ConcurrencyTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var currentActive: Int = 0
+    private(set) var peakConcurrency: Int = 0
+
+    func enter() {
+        lock.lock()
+        defer { lock.unlock() }
+        currentActive += 1
+        if currentActive > peakConcurrency {
+            peakConcurrency = currentActive
+        }
+    }
+
+    func exit() {
+        lock.lock()
+        defer { lock.unlock() }
+        currentActive -= 1
+    }
+}
+
 final class SpyWidgetSnapshotStore: WidgetSnapshotStoreProtocol, @unchecked Sendable {
     struct WriteRecord: Sendable {
         let channels: [WatchedChannel]
@@ -407,27 +428,6 @@ struct StreamMonitorServiceTests {
         let prefs = PreferencesStore(userDefaults: makeTestDefaults())
         let mockNotifier = MockNotificationService()
 
-        final class ConcurrencyTracker: @unchecked Sendable {
-            private let lock = NSLock()
-            private var currentActive: Int = 0
-            private(set) var peakConcurrency: Int = 0
-
-            func enter() {
-                lock.lock()
-                defer { lock.unlock() }
-                currentActive += 1
-                if currentActive > peakConcurrency {
-                    peakConcurrency = currentActive
-                }
-            }
-
-            func exit() {
-                lock.lock()
-                defer { lock.unlock() }
-                currentActive -= 1
-            }
-        }
-
         let tracker = ConcurrencyTracker()
 
         let service = StreamMonitorService(
@@ -540,12 +540,12 @@ struct StreamMonitorServiceTests {
         service = nil
 
         for _ in 0..<50 {
-            if spyCenter.removedObserversCount == 2 { break }
+            if spyCenter.removedObserversCount == 4 { break }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
 
-        // Both sleepObserver and wakeObserver should be removed in deinit
-        #expect(spyCenter.removedObserversCount == 2)
+        // Both screen and system sleep/wake observers should be removed in deinit
+        #expect(spyCenter.removedObserversCount == 4)
 
         // Wait to verify the background loop does not keep fetching after deinit
         try await Task.sleep(nanoseconds: 120_000_000)
@@ -1088,5 +1088,162 @@ struct StreamMonitorServiceTests {
         inFlightService = createdInFlightService
         await createdInFlightService.refreshAll()
         #expect(createdInFlightService.statuses.isEmpty == true)
+    }
+
+    @Test @MainActor func testPowerTierAdaptsConcurrencyBatchSize() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        for i in 1...4 {
+            _ = channelStore.addChannel(handle: "@ch\(i)", name: "Ch \(i)")
+        }
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let sourceBox = ValueBox<PowerSource>(.ac)
+        let lpmBox = ValueBox<Bool>(true)
+        let powerMonitor = PowerStateMonitor(
+            powerSourceProvider: { sourceBox.get() },
+            lowPowerModeProvider: { lpmBox.get() },
+            notificationCenter: NotificationCenter(),
+            observeSystemPowerSource: false
+        )
+
+        let tracker = ConcurrencyTracker()
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: MockNotificationService(),
+            fetcher: { _ in
+                tracker.enter()
+                try? await Task.sleep(nanoseconds: 25_000_000)
+                tracker.exit()
+                return (makeOfflineHTML(), make200Response())
+            },
+            snapshotStore: SpyWidgetSnapshotStore(),
+            powerMonitor: powerMonitor
+        )
+
+        // In Low Power Mode, batchSize must be 1 (serialized)
+        #expect(service.effectiveBatchSize == 1)
+        await service.refreshAll()
+        #expect(tracker.peakConcurrency == 1)
+
+        // On Battery (Low Power Mode off), batchSize must be 2
+        lpmBox.set(false)
+        sourceBox.set(.battery)
+        powerMonitor.refresh()
+        #expect(service.effectiveBatchSize == 2)
+    }
+
+    @Test @MainActor func testSystemWillSleepPausesAndDidWakeRefreshesPowerTierAndResumes() async {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let testCenter = NotificationCenter()
+        let lpmBox = ValueBox<Bool>(false)
+        let powerMonitor = PowerStateMonitor(
+            powerSourceProvider: { .ac },
+            lowPowerModeProvider: { lpmBox.get() },
+            notificationCenter: NotificationCenter(),
+            observeSystemPowerSource: false
+        )
+
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: MockNotificationService(),
+            fetcher: { _ in (makeOfflineHTML(), make200Response()) },
+            notificationCenter: testCenter,
+            snapshotStore: SpyWidgetSnapshotStore(),
+            powerMonitor: powerMonitor
+        )
+
+        service.startPolling()
+        #expect(service.isPolling)
+        #expect(!service.isPausedForSleep)
+        #expect(service.currentPollingInterval == 180)
+
+        // System sleep pauses polling
+        testCenter.post(name: NSWorkspace.willSleepNotification, object: nil)
+        #expect(service.isPausedForSleep)
+
+        // Enable Low Power Mode while asleep, then wake
+        lpmBox.set(true)
+        testCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+        #expect(!service.isPausedForSleep)
+        #expect(service.isPolling)
+        #expect(service.currentPollingInterval == 900)
+
+        service.stopPolling()
+    }
+
+    @Test @MainActor func testPolicyChangeDuringPollingReschedulesWithoutExtraRefresh() async throws {
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        try channelStore.saveChannels([
+            WatchedChannel(id: "youtube:@ch1", platform: .youtube, name: "Ch 1", handle: "@ch1")
+        ])
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let sourceBox = ValueBox<PowerSource>(.ac)
+        let lpmBox = ValueBox<Bool>(false)
+        let testCenter = NotificationCenter()
+        let powerMonitor = PowerStateMonitor(
+            powerSourceProvider: { sourceBox.get() },
+            lowPowerModeProvider: { lpmBox.get() },
+            notificationCenter: testCenter,
+            observeSystemPowerSource: false
+        )
+
+        let fetchCount = ValueBox(0)
+        let service = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: MockNotificationService(),
+            fetcher: { _ in
+                fetchCount.set(fetchCount.get() + 1)
+                return (makeOfflineHTML(), make200Response())
+            },
+            notificationCenter: testCenter,
+            snapshotStore: SpyWidgetSnapshotStore(),
+            powerMonitor: powerMonitor
+        )
+
+        service.startPolling()
+        #expect(service.isPolling)
+        #expect(service.currentPollingInterval == 180)
+
+        // Wait for first fetch
+        for _ in 0..<50 {
+            if fetchCount.get() >= 1 { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(fetchCount.get() == 1)
+
+        // Change policy to battery
+        sourceBox.set(.battery)
+        powerMonitor.refresh()
+        #expect(service.currentPollingInterval == 360)
+
+        // Give any errant tasks time to fire, and verify no extra fetch occurred
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(fetchCount.get() == 1)
+
+        service.stopPolling()
+    }
+
+    @Test func testSleepTimerCoordinatorPreStartCancellationResumesImmediately() async {
+        let coordinator = SleepTimerCoordinator()
+        // Cancel BEFORE start is called (simulating withTaskCancellationHandler onCancel firing before start)
+        coordinator.cancel()
+
+        let resumedImmediately = ValueBox<Bool>(false)
+        let waitTask = Task {
+            await withCheckedContinuation { cont in
+                coordinator.start(interval: 10, leeway: 1, continuation: cont)
+            }
+            resumedImmediately.set(true)
+        }
+
+        // Give it a tiny fraction of a second (50ms) - if it resumes immediately, it completes well within 50ms
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(resumedImmediately.get() == true)
+
+        waitTask.cancel()
+        coordinator.cancel()
     }
 }

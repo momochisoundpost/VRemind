@@ -38,21 +38,39 @@ extension View {
 public struct ChannelRowView: View {
     public let channel: WatchedChannel
     public let status: StreamStatus
+    public let animate: Bool
     public let reduceMotion: Bool
+    public let isDraggingAnyRow: Bool
     public let dateProvider: () -> Date
+    public let shouldSuppressTap: () -> Bool
     public let onDelete: () -> Void
+
+    @State private var isRowHovered: Bool = false
+
+    public nonisolated static func shouldShowDeleteButton(
+        isHovered: Bool,
+        isDraggingAnyRow: Bool
+    ) -> Bool {
+        isHovered && !isDraggingAnyRow
+    }
 
     public init(
         channel: WatchedChannel,
         status: StreamStatus,
+        animate: Bool = true,
         reduceMotion: Bool = false,
+        isDraggingAnyRow: Bool = false,
         dateProvider: @escaping () -> Date = { Date() },
+        shouldSuppressTap: @escaping () -> Bool = { false },
         onDelete: @escaping () -> Void
     ) {
         self.channel = channel
         self.status = status
+        self.animate = animate
         self.reduceMotion = reduceMotion
+        self.isDraggingAnyRow = isDraggingAnyRow
         self.dateProvider = dateProvider
+        self.shouldSuppressTap = shouldSuppressTap
         self.onDelete = onDelete
     }
 
@@ -78,9 +96,14 @@ public struct ChannelRowView: View {
 
     public var body: some View {
         let celebration = CelebrationDetector.detect(status: status, channel: channel, date: dateProvider())
+        let showDelete = Self.shouldShowDeleteButton(
+            isHovered: isRowHovered,
+            isDraggingAnyRow: isDraggingAnyRow
+        )
 
         HStack(spacing: 10) {
             Button(action: {
+                guard !shouldSuppressTap() else { return }
                 if let streamURL {
                     LinkOpener.open(streamURL)
                 }
@@ -112,6 +135,7 @@ public struct ChannelRowView: View {
                         StatusBadge(
                             isLive: true,
                             isCelebration: celebration.isCelebration,
+                            animate: animate,
                             reduceMotion: reduceMotion
                         )
                     } else if case .upcoming = status, celebration.isCelebration {
@@ -119,6 +143,7 @@ public struct ChannelRowView: View {
                             isLive: false,
                             label: "UPCOMING",
                             isCelebration: true,
+                            animate: animate,
                             reduceMotion: reduceMotion
                         )
                     }
@@ -127,17 +152,32 @@ public struct ChannelRowView: View {
             .buttonStyle(.plain)
             .pointingHandCursor()
 
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+            if showDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Theme.live)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .help("Remove channel")
             }
-            .buttonStyle(.plain)
-            .help("Remove channel")
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(showDelete ? Color.primary.opacity(0.06) : Color.clear)
+        )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isRowHovered = hovering
+        }
+        .onDisappear {
+            isRowHovered = false
+        }
     }
 
     @ViewBuilder
@@ -154,7 +194,7 @@ public struct ChannelRowView: View {
                 Text("Live for \(ElapsedTime.liveDuration(since: startedAt))")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(Theme.live)
-                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
             }
 
         case .upcoming(_, let title, let scheduledStartTime):
@@ -168,7 +208,7 @@ public struct ChannelRowView: View {
                 Text(formatScheduledTime(scheduledStartTime))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.orange)
-                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
             }
 
         case .offline(let lastStreamedAt):

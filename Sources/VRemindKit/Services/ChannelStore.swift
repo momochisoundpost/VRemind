@@ -108,17 +108,16 @@ public final class ChannelStore: ObservableObject {
             return
         }
 
-        var changed = false
+        var candidate = channels[index]
         if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            channels[index].name = name
-            changed = true
+            candidate.name = name
         }
         if let avatarURL {
-            channels[index].avatarURL = avatarURL
-            changed = true
+            candidate.avatarURL = avatarURL
         }
 
-        if changed {
+        if candidate != channels[index] {
+            channels[index] = candidate
             save()
         }
     }
@@ -127,7 +126,8 @@ public final class ChannelStore: ObservableObject {
         for id: String,
         status: StreamStatus,
         notifiedLiveId: String? = nil,
-        notifiedUpcomingId: String? = nil
+        notifiedUpcomingId: String? = nil,
+        didTransitionToLive: Bool = false
     ) {
         let targetId = id.lowercased()
         guard let index = channels.firstIndex(where: {
@@ -137,30 +137,43 @@ public final class ChannelStore: ObservableObject {
             return
         }
 
-        var changed = false
+        var candidate = channels[index]
+        let isNewLiveNotification = notifiedLiveId != nil && notifiedLiveId != channels[index].lastNotifiedVideoId
         if let notifiedLiveId {
-            channels[index].lastNotifiedVideoId = notifiedLiveId
-            changed = true
+            candidate.lastNotifiedVideoId = notifiedLiveId
         }
         if let notifiedUpcomingId {
-            channels[index].lastNotifiedUpcomingId = notifiedUpcomingId
-            changed = true
+            candidate.lastNotifiedUpcomingId = notifiedUpcomingId
         }
 
         switch status {
         case .live(_, _, let startedAt):
-            channels[index].lastStreamedAt = startedAt ?? Date()
-            changed = true
+            if let startedAt {
+                candidate.lastStreamedAt = startedAt
+            } else if candidate.lastStreamedAt == nil || didTransitionToLive || isNewLiveNotification {
+                candidate.lastStreamedAt = Date()
+            }
         case .offline(let lastStreamed):
             if let lastStreamed {
-                channels[index].lastStreamedAt = lastStreamed
-                changed = true
+                candidate.lastStreamedAt = lastStreamed
             }
         case .upcoming, .unknown:
             break
         }
 
-        if changed {
+        if candidate != channels[index] {
+            channels[index] = candidate
+            save()
+        }
+    }
+
+    public func reorderSection(orderedSectionIds: [String]) {
+        let reordered = ChannelOrderPolicy.reorderWatchlistSlots(
+            channels: channels,
+            orderedSectionIds: orderedSectionIds
+        )
+        if reordered != channels {
+            channels = reordered
             save()
         }
     }

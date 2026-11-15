@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Testing
 import VRemindCore
@@ -188,5 +189,69 @@ struct ChannelStoreTests {
 
         store.removeChannel(id: "twitch:ironmouse")
         #expect(!store.channels.contains { $0.id == "twitch:ironmouse" })
+    }
+
+    @Test @MainActor func updateMetadataAndStatusSkipNoOpSavesAndPublishes() async {
+        let store = ChannelStore(userDefaults: makeTestDefaults())
+        let avatar = URL(string: "https://example.com/a.png")!
+        store.addChannel(handle: "@steady", name: "Steady", avatarURL: avatar)
+
+        let started = Date(timeIntervalSince1970: 1_700_000_000)
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v1", title: "Live", startedAt: started),
+            notifiedLiveId: "v1",
+            didTransitionToLive: true
+        )
+
+        var publishCount = 0
+        var cancellables = Set<AnyCancellable>()
+        store.$channels
+            .dropFirst()
+            .sink { _ in publishCount += 1 }
+            .store(in: &cancellables)
+
+        // Identical metadata -> zero publishes
+        store.updateMetadata(for: "youtube:@steady", name: "Steady", avatarURL: avatar)
+        #expect(publishCount == 0)
+
+        // Identical live status with same startedAt -> zero publishes
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v1", title: "Live", startedAt: started)
+        )
+        #expect(publishCount == 0)
+
+        // Steady-state live poll with startedAt == nil (already has lastStreamedAt, didTransitionToLive == false) -> zero publishes, preserves lastStreamedAt
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v1", title: "Live", startedAt: nil),
+            didTransitionToLive: false
+        )
+        #expect(publishCount == 0)
+        #expect(store.channels.first(where: { $0.id == "youtube:@steady" })?.lastStreamedAt == started)
+
+        // Repeated poll with same notifiedLiveId: "v1" and startedAt == nil -> zero publishes, preserves lastStreamedAt
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v1", title: "Live", startedAt: nil),
+            notifiedLiveId: "v1",
+            didTransitionToLive: false
+        )
+        #expect(publishCount == 0)
+        #expect(store.channels.first(where: { $0.id == "youtube:@steady" })?.lastStreamedAt == started)
+
+        // Transition to new live video "v2" with startedAt == nil -> publishes and updates lastStreamedAt
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v2", title: "Live 2", startedAt: nil),
+            notifiedLiveId: "v2",
+            didTransitionToLive: false
+        )
+        #expect(publishCount == 1)
+        let updated = store.channels.first(where: { $0.id == "youtube:@steady" })
+        #expect(updated?.lastNotifiedVideoId == "v2")
+        #expect(updated?.lastStreamedAt != nil)
+        #expect(updated?.lastStreamedAt != started)
     }
 }

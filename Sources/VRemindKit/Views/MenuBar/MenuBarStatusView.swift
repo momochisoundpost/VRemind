@@ -43,6 +43,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
     @Published public var selectedPlatform: StreamPlatform = .youtube
     @Published public var newHandleInput: String = ""
     @Published public private(set) var validationError: String? = nil
+    @Published public var isPopoverVisible: Bool = false
 
     public var secretAlertPresenter: SecretAlertPresenter? = nil
 
@@ -70,26 +71,45 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
     public let channelStore: ChannelStore
     public let monitorService: StreamMonitorService
+    public let powerMonitor: PowerStateMonitor?
+
+    public var preferencesStore: PreferencesStore {
+        monitorService.preferencesStore
+    }
+
+    public var areAnimationsPaused: Bool {
+        preferencesStore.settings.reduceMotion || (powerMonitor?.currentPolicy.animationsPaused ?? false)
+    }
+
+    public var shouldAnimatePopoverEffects: Bool {
+        isPopoverVisible && !areAnimationsPaused
+    }
 
     private let dateProvider: () -> Date
     private let calendar: Calendar
+    private var dailyOrderDayStart: Date?
+    private var dailyOrderedIds: [String]?
     private var cancellables = Set<AnyCancellable>()
 
     public init(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,
+        powerMonitor: PowerStateMonitor? = nil,
         dateProvider: @escaping () -> Date = { Date() },
         calendar: Calendar = .current
     ) {
         self.channelStore = channelStore
         self.monitorService = monitorService
+        let resolvedPowerMonitor = powerMonitor ?? monitorService.powerMonitor
+        self.powerMonitor = resolvedPowerMonitor
         self.dateProvider = dateProvider
         self.calendar = calendar
 
-        Publishers.Merge3(
+        Publishers.Merge4(
             channelStore.objectWillChange,
             monitorService.objectWillChange,
-            monitorService.preferencesStore.objectWillChange
+            monitorService.preferencesStore.objectWillChange,
+            resolvedPowerMonitor.objectWillChange
         )
         .sink { [weak self] _ in
             self?.objectWillChange.send()
@@ -131,10 +151,20 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public var sections: MenuBarSections {
-        Self.splitSections(
+        let base = Self.splitSections(
             channels: channelStore.channels,
             statuses: monitorService.statuses
         )
+        guard let orderedIds = dailyOrderedIds, !orderedIds.isEmpty else {
+            return base
+        }
+        let todayStart = calendar.startOfDay(for: dateProvider())
+        if dailyOrderDayStart == todayStart {
+            return ChannelOrderPolicy.applyCustomOrder(base, orderedIds: orderedIds)
+        }
+        dailyOrderDayStart = nil
+        dailyOrderedIds = nil
+        return base
     }
 
     public var liveCount: Int {
@@ -200,7 +230,55 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public func removeChannel(id: String) {
+        let targetId = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        dailyOrderedIds?.removeAll { entry in
+            let normalized = entry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == targetId ||
+                (!targetId.contains(":") && normalized == "youtube:\(targetId)")
+        }
         channelStore.removeChannel(id: id)
+    }
+
+    public func clearCustomOrder() {
+        dailyOrderDayStart = nil
+        dailyOrderedIds = nil
+        objectWillChange.send()
+    }
+
+    public func reorderSection(_ kind: SectionKind, fromIndex: Int, toIndex: Int) {
+        let currentSections = sections
+        let targetItems: [WatchedChannel]
+        switch kind {
+        case .live:
+            targetItems = currentSections.live
+        case .upcoming:
+            targetItems = currentSections.upcoming
+        case .offline:
+            targetItems = currentSections.offline
+        }
+
+        guard fromIndex >= 0, fromIndex < targetItems.count,
+              toIndex >= 0, toIndex < targetItems.count,
+              fromIndex != toIndex else {
+            return
+        }
+
+        let reordered = ChannelOrderPolicy.reorderSectionItems(
+            targetItems,
+            fromIndex: fromIndex,
+            toIndex: toIndex
+        )
+        let nextSections = ChannelOrderPolicy.applySectionOrder(
+            currentSections,
+            kind: kind,
+            reorderedSection: reordered
+        )
+
+        dailyOrderDayStart = calendar.startOfDay(for: dateProvider())
+        dailyOrderedIds = (nextSections.live + nextSections.upcoming + nextSections.offline).map(\.id)
+
+        objectWillChange.send()
+        channelStore.reorderSection(orderedSectionIds: reordered.map(\.id))
     }
 
     public func refresh() {
@@ -210,7 +288,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public func isPopoverConfettiActive(date: Date = Date()) -> Bool {
-        guard !monitorService.preferencesStore.settings.reduceMotion else {
+        guard !areAnimationsPaused else {
             return false
         }
         return CelebrationDetector.shouldShowConfetti(
@@ -232,16 +310,33 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 }
 
+private struct ActiveSectionDrag: Equatable {
+    let kind: SectionKind
+    let draggedId: String
+    var step: DragLayoutStep
+}
+
+private struct SectionRowHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 // MARK: - MenuBarStatusView
 
 public struct MenuBarStatusView: View {
+    private static let sectionRowSpacing: CGFloat = 4
+    private static let fallbackRowHeight: CGFloat = 46
+
     @ObservedObject public var viewModel: MenuBarStatusViewModel
-    @ObservedObject private var channelStore: ChannelStore
-    @ObservedObject private var monitorService: StreamMonitorService
-    @ObservedObject private var preferencesStore: PreferencesStore
-    @State private var isPopoverVisible = false
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
+
+    @State private var activeDrag: ActiveSectionDrag? = nil
+    @State private var rowHeightsBySection: [SectionKind: [String: CGFloat]] = [:]
+    @State private var suppressTapUntil: Date = .distantPast
 
     public static func shouldFlashStatusButton(isAnyLive: Bool, reduceMotion: Bool) -> Bool {
         false
@@ -253,9 +348,6 @@ public struct MenuBarStatusView: View {
         onQuit: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
-        self._channelStore = ObservedObject(wrappedValue: viewModel.channelStore)
-        self._monitorService = ObservedObject(wrappedValue: viewModel.monitorService)
-        self._preferencesStore = ObservedObject(wrappedValue: viewModel.monitorService.preferencesStore)
         self.onOpenPreferences = onOpenPreferences
         self.onQuit = onQuit
     }
@@ -270,16 +362,15 @@ public struct MenuBarStatusView: View {
                 AddChannelBarView(viewModel: viewModel)
             }
 
-            if isPopoverVisible && viewModel.isPopoverConfettiActive() {
+            if viewModel.isPopoverVisible && viewModel.isPopoverConfettiActive() {
                 ConfettiOverlayView()
             }
         }
         .frame(width: 360, height: 440)
-        .onAppear {
-            isPopoverVisible = true
-        }
-        .onDisappear {
-            isPopoverVisible = false
+        .onChange(of: viewModel.isPopoverVisible) { isVisible in
+            if !isVisible {
+                activeDrag = nil
+            }
         }
     }
 
@@ -359,6 +450,7 @@ public struct MenuBarStatusView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if !sections.live.isEmpty {
                         sectionBlock(
+                            kind: .live,
                             title: "LIVE NOW",
                             count: sections.live.count,
                             color: Theme.live,
@@ -368,6 +460,7 @@ public struct MenuBarStatusView: View {
 
                     if !sections.upcoming.isEmpty {
                         sectionBlock(
+                            kind: .upcoming,
                             title: "UPCOMING",
                             count: sections.upcoming.count,
                             color: .orange,
@@ -377,6 +470,7 @@ public struct MenuBarStatusView: View {
 
                     if !sections.offline.isEmpty {
                         sectionBlock(
+                            kind: .offline,
                             title: "OFFLINE",
                             count: sections.offline.count,
                             color: .secondary,
@@ -390,20 +484,22 @@ public struct MenuBarStatusView: View {
     }
 
     private func sectionBlock(
+        kind: SectionKind,
         title: String,
         count: Int,
         color: Color,
         channels: [WatchedChannel]
     ) -> some View {
-        let reduceMotion = preferencesStore.settings.reduceMotion
-        let isCelebrating = (title == "LIVE NOW" || title == "UPCOMING") && viewModel.isSectionCelebrating(channels)
+        let reduceMotion = viewModel.areAnimationsPaused
+        let animate = viewModel.shouldAnimatePopoverEffects
+        let isCelebrating = (kind == .live || kind == .upcoming) && viewModel.isSectionCelebrating(channels)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(title)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(color)
-                    .rainbowForeground(active: isCelebrating, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebrating, animate: animate, reduceMotion: reduceMotion)
 
                 Text("(\(count))")
                     .font(.system(size: 11))
@@ -414,17 +510,181 @@ public struct MenuBarStatusView: View {
             .padding(.horizontal, 12)
             .padding(.top, 4)
 
-            ForEach(channels) { channel in
-                ChannelRowView(
-                    channel: channel,
-                    status: viewModel.monitorService.status(for: channel),
-                    reduceMotion: reduceMotion,
-                    onDelete: {
-                        viewModel.removeChannel(id: channel.id)
+            VStack(alignment: .leading, spacing: Self.sectionRowSpacing) {
+                ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
+                    sectionRowView(
+                        kind: kind,
+                        index: index,
+                        channel: channel,
+                        channels: channels,
+                        animate: animate,
+                        reduceMotion: reduceMotion
+                    )
+                }
+            }
+            .coordinateSpace(name: sectionCoordinateSpaceName(for: kind))
+            .onPreferenceChange(SectionRowHeightPreferenceKey.self) { heights in
+                var current = rowHeightsBySection[kind] ?? [:]
+                var changed = false
+                for (id, height) in heights where height > 0 {
+                    if abs((current[id] ?? 0) - height) > 0.5 {
+                        current[id] = height
+                        changed = true
                     }
-                )
+                }
+                if changed {
+                    rowHeightsBySection[kind] = current
+                }
             }
         }
+    }
+
+    private func sectionRowView(
+        kind: SectionKind,
+        index: Int,
+        channel: WatchedChannel,
+        channels: [WatchedChannel],
+        animate: Bool,
+        reduceMotion: Bool
+    ) -> some View {
+        let isDragged = isDraggedRow(kind: kind, channelId: channel.id)
+        let rowAnimation: Animation? = (isDragged || reduceMotion || activeDrag == nil)
+            ? nil
+            : .interactiveSpring(response: 0.22, dampingFraction: 0.86)
+        let targetIndexInSection = activeDrag?.kind == kind ? activeDrag?.step.targetIndex : nil
+
+        let row = ChannelRowView(
+            channel: channel,
+            status: viewModel.monitorService.status(for: channel),
+            animate: animate,
+            reduceMotion: reduceMotion,
+            isDraggingAnyRow: activeDrag != nil,
+            shouldSuppressTap: { Date() < suppressTapUntil },
+            onDelete: {
+                viewModel.removeChannel(id: channel.id)
+            }
+        )
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: SectionRowHeightPreferenceKey.self,
+                    value: [channel.id: proxy.size.height]
+                )
+            }
+        )
+        .offset(y: rowOffset(kind: kind, index: index, channelCount: channels.count))
+        .zIndex(isDragged ? 10 : 0)
+        .opacity(isDragged ? 0.92 : 1.0)
+        .animation(rowAnimation, value: targetIndexInSection)
+
+        return withSectionDragGesture(
+            row,
+            enabled: channels.count >= 2,
+            kind: kind,
+            channel: channel,
+            channels: channels
+        )
+    }
+
+    @ViewBuilder
+    private func withSectionDragGesture<Row: View>(
+        _ row: Row,
+        enabled: Bool,
+        kind: SectionKind,
+        channel: WatchedChannel,
+        channels: [WatchedChannel]
+    ) -> some View {
+        if enabled {
+            row.simultaneousGesture(
+                sectionDragGesture(kind: kind, channel: channel, channels: channels)
+            )
+        } else {
+            row
+        }
+    }
+
+    private func sectionDragGesture(
+        kind: SectionKind,
+        channel: WatchedChannel,
+        channels: [WatchedChannel]
+    ) -> some Gesture {
+        DragGesture(
+            minimumDistance: ChannelOrderPolicy.dragActivationThreshold,
+            coordinateSpace: .named(sectionCoordinateSpaceName(for: kind))
+        )
+        .onChanged { value in
+            if let current = activeDrag, (current.kind != kind || current.draggedId != channel.id) {
+                return
+            }
+
+            let deltaY = value.translation.height
+            if activeDrag == nil {
+                guard ChannelOrderPolicy.exceedsDragThreshold(deltaY) else { return }
+            }
+
+            guard let currentIndex = channels.firstIndex(where: { $0.id == channel.id }) else {
+                activeDrag = nil
+                return
+            }
+
+            let step = ChannelOrderPolicy.calculateDragLayout(
+                draggedIndex: currentIndex,
+                deltaY: deltaY,
+                itemHeights: measuredHeights(for: kind, channels: channels),
+                itemSpacing: Self.sectionRowSpacing
+            )
+            activeDrag = ActiveSectionDrag(kind: kind, draggedId: channel.id, step: step)
+        }
+        .onEnded { value in
+            guard let current = activeDrag, current.kind == kind, current.draggedId == channel.id else {
+                return
+            }
+
+            // Block any synthetic button click fired right as the mouse releases a drag.
+            suppressTapUntil = Date().addingTimeInterval(0.2)
+
+            let fromIndex = channels.firstIndex(where: { $0.id == channel.id })
+            let targetIndex: Int?
+            if let fromIndex {
+                targetIndex = ChannelOrderPolicy.calculateDragLayout(
+                    draggedIndex: fromIndex,
+                    deltaY: value.translation.height,
+                    itemHeights: measuredHeights(for: kind, channels: channels),
+                    itemSpacing: Self.sectionRowSpacing
+                ).targetIndex
+            } else {
+                targetIndex = nil
+            }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                activeDrag = nil
+                if let fromIndex, let targetIndex, targetIndex != fromIndex {
+                    viewModel.reorderSection(kind, fromIndex: fromIndex, toIndex: targetIndex)
+                }
+            }
+        }
+    }
+
+    private func sectionCoordinateSpaceName(for kind: SectionKind) -> String {
+        "section-\(kind.rawValue)"
+    }
+
+    private func isDraggedRow(kind: SectionKind, channelId: String) -> Bool {
+        activeDrag?.kind == kind && activeDrag?.draggedId == channelId
+    }
+
+    private func rowOffset(kind: SectionKind, index: Int, channelCount: Int) -> CGFloat {
+        guard let activeDrag, activeDrag.kind == kind else { return 0 }
+        let translates = activeDrag.step.itemTranslateY
+        guard index >= 0, index < channelCount, index < translates.count else { return 0 }
+        return translates[index]
+    }
+
+    private func measuredHeights(for kind: SectionKind, channels: [WatchedChannel]) -> [CGFloat] {
+        let cached = rowHeightsBySection[kind] ?? [:]
+        return channels.map { cached[$0.id] ?? Self.fallbackRowHeight }
     }
 
     // MARK: - Static Helpers
@@ -444,15 +704,18 @@ public struct MenuBarStatusView: View {
         button.toolTip = isLive ? "VRemind (Live now)" : "VRemind"
     }
 
-    public static func makePopover(
+    @MainActor
+    public static func makePopoverWithViewModel(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,
-        onOpenPreferences: @escaping () -> Void,
-        onQuit: @escaping () -> Void
-    ) -> NSPopover {
+        powerMonitor: PowerStateMonitor? = nil,
+        onOpenPreferences: @escaping () -> Void = {},
+        onQuit: @escaping () -> Void = {}
+    ) -> (popover: NSPopover, viewModel: MenuBarStatusViewModel) {
         let viewModel = MenuBarStatusViewModel(
             channelStore: channelStore,
-            monitorService: monitorService
+            monitorService: monitorService,
+            powerMonitor: powerMonitor
         )
         let rootView = MenuBarStatusView(
             viewModel: viewModel,
@@ -465,6 +728,23 @@ public struct MenuBarStatusView: View {
         popover.contentSize = NSSize(width: 360, height: 440)
         popover.behavior = .transient
         popover.contentViewController = hostingController
-        return popover
+        return (popover, viewModel)
+    }
+
+    @MainActor
+    public static func makePopover(
+        channelStore: ChannelStore,
+        monitorService: StreamMonitorService,
+        powerMonitor: PowerStateMonitor? = nil,
+        onOpenPreferences: @escaping () -> Void = {},
+        onQuit: @escaping () -> Void = {}
+    ) -> NSPopover {
+        makePopoverWithViewModel(
+            channelStore: channelStore,
+            monitorService: monitorService,
+            powerMonitor: powerMonitor,
+            onOpenPreferences: onOpenPreferences,
+            onQuit: onQuit
+        ).popover
     }
 }
