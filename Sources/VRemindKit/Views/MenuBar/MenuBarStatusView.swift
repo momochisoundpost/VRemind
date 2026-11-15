@@ -292,12 +292,6 @@ public struct MenuBarStatusView: View {
             }
         }
         .frame(width: 360, height: 440)
-        .onAppear {
-            viewModel.isPopoverVisible = true
-        }
-        .onDisappear {
-            viewModel.isPopoverVisible = false
-        }
     }
 
     private var headerView: some View {

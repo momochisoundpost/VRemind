@@ -166,6 +166,7 @@ struct MenuBarViewTests {
         #expect(popover2.contentViewController != nil)
         #expect(popover2.behavior == .transient)
         #expect(vm2.powerMonitor === powerMonitor)
+        #expect(vm2.isPopoverVisible == false)
     }
 
     @Test @MainActor func testViewsRenderWithoutCrash() {
