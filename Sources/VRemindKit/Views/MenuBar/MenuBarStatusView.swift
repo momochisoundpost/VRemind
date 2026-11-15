@@ -87,6 +87,8 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
     private let dateProvider: () -> Date
     private let calendar: Calendar
+    private var dailyOrderDayStart: Date?
+    private var dailyOrderedIds: [String]?
     private var cancellables = Set<AnyCancellable>()
 
     public init(
@@ -149,10 +151,20 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public var sections: MenuBarSections {
-        Self.splitSections(
+        let base = Self.splitSections(
             channels: channelStore.channels,
             statuses: monitorService.statuses
         )
+        guard let orderedIds = dailyOrderedIds, !orderedIds.isEmpty else {
+            return base
+        }
+        let todayStart = calendar.startOfDay(for: dateProvider())
+        if dailyOrderDayStart == todayStart {
+            return ChannelOrderPolicy.applyCustomOrder(base, orderedIds: orderedIds)
+        }
+        dailyOrderDayStart = nil
+        dailyOrderedIds = nil
+        return base
     }
 
     public var liveCount: Int {
@@ -218,7 +230,55 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public func removeChannel(id: String) {
+        let targetId = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        dailyOrderedIds?.removeAll { entry in
+            let normalized = entry.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == targetId ||
+                (!targetId.contains(":") && normalized == "youtube:\(targetId)")
+        }
         channelStore.removeChannel(id: id)
+    }
+
+    public func clearCustomOrder() {
+        dailyOrderDayStart = nil
+        dailyOrderedIds = nil
+        objectWillChange.send()
+    }
+
+    public func reorderSection(_ kind: SectionKind, fromIndex: Int, toIndex: Int) {
+        let currentSections = sections
+        let targetItems: [WatchedChannel]
+        switch kind {
+        case .live:
+            targetItems = currentSections.live
+        case .upcoming:
+            targetItems = currentSections.upcoming
+        case .offline:
+            targetItems = currentSections.offline
+        }
+
+        guard fromIndex >= 0, fromIndex < targetItems.count,
+              toIndex >= 0, toIndex < targetItems.count,
+              fromIndex != toIndex else {
+            return
+        }
+
+        let reordered = ChannelOrderPolicy.reorderSectionItems(
+            targetItems,
+            fromIndex: fromIndex,
+            toIndex: toIndex
+        )
+        let nextSections = ChannelOrderPolicy.applySectionOrder(
+            currentSections,
+            kind: kind,
+            reorderedSection: reordered
+        )
+
+        dailyOrderDayStart = calendar.startOfDay(for: dateProvider())
+        dailyOrderedIds = (nextSections.live + nextSections.upcoming + nextSections.offline).map(\.id)
+
+        objectWillChange.send()
+        channelStore.reorderSection(orderedSectionIds: reordered.map(\.id))
     }
 
     public func refresh() {

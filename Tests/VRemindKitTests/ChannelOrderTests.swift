@@ -106,4 +106,92 @@ struct ChannelOrderTests {
         let reloaded = ChannelStore(userDefaults: defaults)
         #expect(reloaded.channels.map(\.id) == ["youtube:@two", "youtube:@one", "youtube:@bukancaitlyn"])
     }
+
+    @Test @MainActor func testViewModelReorderSectionUpdatesStoreAndPersists() async {
+        let defaults = makeTestDefaults()
+        let store = ChannelStore(userDefaults: defaults)
+        store.addChannel(handle: "@one", name: "One")
+        store.addChannel(handle: "@two", name: "Two")
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let monitor = StreamMonitorService(
+            channelStore: store,
+            preferencesStore: prefs,
+            notificationService: NotificationService(center: NoOpNotificationCenter()),
+            fetcher: { _ in
+                (Data("<html></html>".utf8), HTTPURLResponse(url: URL(string: "https://www.youtube.com")!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            },
+            snapshotStore: SpyWidgetSnapshotStore()
+        )
+        let viewModel = MenuBarStatusViewModel(channelStore: store, monitorService: monitor)
+
+        #expect(viewModel.sections.offline.map(\.id) == [
+            "youtube:@bukancaitlyn",
+            "youtube:@one",
+            "youtube:@two"
+        ])
+
+        viewModel.reorderSection(.offline, fromIndex: 2, toIndex: 0)
+
+        #expect(viewModel.sections.offline.map(\.id) == [
+            "youtube:@two",
+            "youtube:@bukancaitlyn",
+            "youtube:@one"
+        ])
+        #expect(store.channels.map(\.id) == [
+            "youtube:@two",
+            "youtube:@bukancaitlyn",
+            "youtube:@one"
+        ])
+
+        let reloaded = ChannelStore(userDefaults: defaults)
+        #expect(reloaded.channels.map(\.id) == [
+            "youtube:@two",
+            "youtube:@bukancaitlyn",
+            "youtube:@one"
+        ])
+    }
+
+    @Test @MainActor func testSameDayCustomOrderProjectionOverridesSecretDemotionUntilNextDay() async {
+        let dayOne = Date(timeIntervalSince1970: 1_700_000_000)
+        let currentDate = ValueBox(dayOne)
+
+        let defaults = makeTestDefaults()
+        let store = ChannelStore(userDefaults: defaults)
+        store.addChannel(handle: "@alpha", name: "Alpha")
+        store.addChannel(handle: "@matsuijulianch", name: "Matsui Julian")
+
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        let okResponse = HTTPURLResponse(url: URL(string: "https://www.youtube.com")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let monitor = StreamMonitorService(
+            channelStore: store,
+            preferencesStore: prefs,
+            notificationService: NotificationService(center: NoOpNotificationCenter()),
+            fetcher: { _ in (Data("<html></html>".utf8), okResponse) },
+            snapshotStore: SpyWidgetSnapshotStore(),
+            dateProvider: { currentDate.get() }
+        )
+        let viewModel = MenuBarStatusViewModel(
+            channelStore: store,
+            monitorService: monitor,
+            dateProvider: { currentDate.get() },
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        // Initially secret target is demoted to the bottom of offline section
+        #expect(viewModel.sections.offline.last?.handle == "@matsuijulianch")
+        let targetIndex = viewModel.sections.offline.count - 1
+
+        // User drags @matsuijulianch to index 0
+        viewModel.reorderSection(.offline, fromIndex: targetIndex, toIndex: 0)
+        #expect(viewModel.sections.offline.first?.handle == "@matsuijulianch")
+
+        // Same-day poll refresh preserves the dragged position
+        await monitor.refreshAll()
+        #expect(viewModel.sections.offline.first?.handle == "@matsuijulianch")
+
+        // Next calendar day clears daily projection and restores bottom demotion
+        currentDate.set(dayOne.addingTimeInterval(86_400))
+        #expect(viewModel.sections.offline.last?.handle == "@matsuijulianch")
+    }
 }
