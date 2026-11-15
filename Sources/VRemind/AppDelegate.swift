@@ -4,7 +4,7 @@ import SwiftUI
 import VRemindKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
 
@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var notificationService: NotificationService!
     var monitorService: StreamMonitorService!
     var updateService: UpdateService!
+    var powerMonitor: PowerStateMonitor!
+    var priorityManager: ProcessPriorityManager!
+    var statusViewModel: MenuBarStatusViewModel!
     var updateTimer: Timer?
     var latestAvailableRelease: GitHubRelease?
 
@@ -23,13 +26,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let powerMonitor = PowerStateMonitor(observeSystemPowerSource: true)
+        let priorityManager = ProcessPriorityManager(backend: .darwin)
+        priorityManager.applyLaunchBaseline()
+
+        self.powerMonitor = powerMonitor
+        self.priorityManager = priorityManager
+
         let channelStore = ChannelStore()
         let preferencesStore = PreferencesStore()
         let notificationService = NotificationService()
         let monitorService = StreamMonitorService(
             channelStore: channelStore,
             preferencesStore: preferencesStore,
-            notificationService: notificationService
+            notificationService: notificationService,
+            powerMonitor: powerMonitor
         )
         let updateService = UpdateService(preferencesStore: preferencesStore)
 
@@ -78,9 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupPopover() {
-        popover = MenuBarStatusView.makePopover(
+        let (pop, viewModel) = MenuBarStatusView.makePopoverWithViewModel(
             channelStore: channelStore,
             monitorService: monitorService,
+            powerMonitor: powerMonitor,
             onOpenPreferences: { [weak self] in
                 self?.openPreferences()
             },
@@ -88,6 +100,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.quitApp()
             }
         )
+        pop.delegate = self
+        self.popover = pop
+        self.statusViewModel = viewModel
+    }
+
+    // MARK: - NSPopoverDelegate
+
+    func popoverWillShow(_ notification: Notification) {
+        statusViewModel?.isPopoverVisible = true
+        priorityManager?.beginUIActivity(.popover)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        statusViewModel?.isPopoverVisible = false
+        priorityManager?.endUIActivity(.popover)
     }
 
     @objc private func statusItemClicked(_ sender: Any?) {
@@ -113,6 +140,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onRestore: { [weak self] in
                 self?.handleRestore()
+            },
+            onVisibilityChange: { [weak self] isVisible in
+                if isVisible {
+                    self?.priorityManager?.beginUIActivity(.preferences)
+                } else {
+                    self?.priorityManager?.endUIActivity(.preferences)
+                }
+            },
+            onUpdateVisibilityChange: { [weak self] isVisible in
+                if isVisible {
+                    self?.priorityManager?.beginUIActivity(.updateAvailable)
+                } else {
+                    self?.priorityManager?.endUIActivity(.updateAvailable)
+                }
             }
         )
     }
@@ -147,6 +188,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Task { [weak self] in
                         await self?.monitorService.refreshAll()
                         self?.checkUpdateConsentAndLaunchCheck()
+                    }
+                },
+                onVisibilityChange: { [weak self] isVisible in
+                    if isVisible {
+                        self?.priorityManager?.beginUIActivity(.onboarding)
+                    } else {
+                        self?.priorityManager?.endUIActivity(.onboarding)
                     }
                 }
             )
@@ -187,13 +235,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func presentUpdateAvailableWindow(release: GitHubRelease) {
+        UpdateAvailableWindowController.show(
+            release: release,
+            preferencesStore: preferencesStore,
+            onVisibilityChange: { [weak self] isVisible in
+                if isVisible {
+                    self?.priorityManager?.beginUIActivity(.updateAvailable)
+                } else {
+                    self?.priorityManager?.endUIActivity(.updateAvailable)
+                }
+            }
+        )
+    }
+
     private func performLaunchUpdateCheck() {
         Task { [weak self] in
             guard let self else { return }
-            let result = await self.updateService.checkForUpdates(manual: false)
+            let isLPM = self.powerMonitor.currentPolicy.deferBackgroundUpdateChecks
+            let result = await self.updateService.checkForUpdates(manual: false, isLowPowerModeEnabled: isLPM)
             if case .updateAvailable(let release) = result {
                 self.latestAvailableRelease = release
-                UpdateAvailableWindowController.show(release: release, preferencesStore: self.preferencesStore)
+                self.presentUpdateAvailableWindow(release: release)
             }
         }
     }
@@ -202,12 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard preferencesStore.settings.updateConsent == .allowed else { return }
         guard updateTimer == nil else { return }
 
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.performPeriodicUpdateCheck()
             }
         }
+        timer.tolerance = 3_600
+        updateTimer = timer
     }
 
     func stopPeriodicUpdateChecks() {
@@ -217,7 +282,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func performPeriodicUpdateCheck() async {
         guard preferencesStore.settings.updateConsent == .allowed else { return }
-        let result = await updateService.checkForUpdates(manual: false)
+        let isLPM = powerMonitor.currentPolicy.deferBackgroundUpdateChecks
+        let result = await updateService.checkForUpdates(manual: false, isLowPowerModeEnabled: isLPM)
         if case .updateAvailable(let release) = result {
             self.latestAvailableRelease = release
             await notificationService.notifyUpdate(release: release)
@@ -229,9 +295,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let targetRelease = release ?? self.latestAvailableRelease
             if let targetRelease {
-                UpdateAvailableWindowController.show(release: targetRelease, preferencesStore: self.preferencesStore)
+                self.presentUpdateAvailableWindow(release: targetRelease)
             } else if case .updateAvailable(let rel) = self.updateService.lastResult {
-                UpdateAvailableWindowController.show(release: rel, preferencesStore: self.preferencesStore)
+                self.presentUpdateAvailableWindow(release: rel)
             }
         }
     }

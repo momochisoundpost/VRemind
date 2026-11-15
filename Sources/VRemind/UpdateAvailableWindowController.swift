@@ -8,17 +8,23 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
 
     public let release: GitHubRelease
     public let preferencesStore: PreferencesStore
+    private var onVisibilityChange: ((Bool) -> Void)?
 
     public static func show(
         release: GitHubRelease,
         preferencesStore: PreferencesStore,
-        openURL: ((URL) -> Void)? = nil
+        openURL: ((URL) -> Void)? = nil,
+        onVisibilityChange: ((Bool) -> Void)? = nil
     ) {
         if let existing = currentController {
             if existing.release.tagName == release.tagName {
+                if let onVisibilityChange {
+                    existing.onVisibilityChange = onVisibilityChange
+                }
                 existing.window?.center()
                 existing.window?.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
+                existing.onVisibilityChange?(true)
                 return
             } else {
                 existing.close()
@@ -29,13 +35,15 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
         let controller = UpdateAvailableWindowController(
             release: release,
             preferencesStore: preferencesStore,
-            openURL: openURL
+            openURL: openURL,
+            onVisibilityChange: onVisibilityChange
         )
         currentController = controller
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        controller.onVisibilityChange?(true)
     }
 
     public static var isShowing: Bool {
@@ -50,10 +58,12 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
     public init(
         release: GitHubRelease,
         preferencesStore: PreferencesStore,
-        openURL: ((URL) -> Void)? = nil
+        openURL: ((URL) -> Void)? = nil,
+        onVisibilityChange: ((Bool) -> Void)? = nil
     ) {
         self.release = release
         self.preferencesStore = preferencesStore
+        self.onVisibilityChange = onVisibilityChange
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
@@ -107,7 +117,20 @@ public final class UpdateAvailableWindowController: NSWindowController, NSWindow
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func teardownAndNotifyClosed() {
+        window?.contentViewController = nil
+        let callback = onVisibilityChange
+        onVisibilityChange = nil
+        callback?(false)
+    }
+
+    public override func close() {
+        teardownAndNotifyClosed()
+        super.close()
+    }
+
     public func windowWillClose(_ notification: Notification) {
+        teardownAndNotifyClosed()
         if UpdateAvailableWindowController.currentController === self {
             UpdateAvailableWindowController.currentController = nil
         }

@@ -5,21 +5,27 @@ import VRemindKit
 @MainActor
 public final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private static var currentController: OnboardingWindowController?
+    private var onVisibilityChange: ((Bool) -> Void)?
 
     public static func showIfNeeded(
         channelStore: ChannelStore,
         preferencesStore: PreferencesStore,
         notificationService: NotificationService,
-        onComplete: (() -> Void)? = nil
+        onComplete: (() -> Void)? = nil,
+        onVisibilityChange: ((Bool) -> Void)? = nil
     ) {
         guard !preferencesStore.settings.hasCompletedOnboarding else {
             return
         }
 
         if let existing = currentController {
+            if let onVisibilityChange {
+                existing.onVisibilityChange = onVisibilityChange
+            }
             existing.window?.center()
             existing.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            existing.onVisibilityChange?(true)
             return
         }
 
@@ -31,21 +37,25 @@ public final class OnboardingWindowController: NSWindowController, NSWindowDeleg
                 onComplete?()
                 currentController?.close()
                 currentController = nil
-            }
+            },
+            onVisibilityChange: onVisibilityChange
         )
         currentController = controller
         controller.showWindow(nil)
         controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        controller.onVisibilityChange?(true)
     }
 
     public init(
         channelStore: ChannelStore,
         preferencesStore: PreferencesStore,
         notificationService: NotificationService,
-        onComplete: (() -> Void)? = nil
+        onComplete: (() -> Void)? = nil,
+        onVisibilityChange: ((Bool) -> Void)? = nil
     ) {
+        self.onVisibilityChange = onVisibilityChange
         let viewModel = OnboardingViewModel(
             channelStore: channelStore,
             preferencesStore: preferencesStore,
@@ -75,7 +85,19 @@ public final class OnboardingWindowController: NSWindowController, NSWindowDeleg
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func notifyClosed() {
+        let callback = onVisibilityChange
+        onVisibilityChange = nil
+        callback?(false)
+    }
+
+    public override func close() {
+        super.close()
+        notifyClosed()
+    }
+
     public func windowWillClose(_ notification: Notification) {
+        notifyClosed()
         if OnboardingWindowController.currentController === self {
             OnboardingWindowController.currentController = nil
         }

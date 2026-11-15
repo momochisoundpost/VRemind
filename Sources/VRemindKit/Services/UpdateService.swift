@@ -15,6 +15,13 @@ public final class UpdateService: ObservableObject {
     @Published public var isChecking: Bool = false
     @Published public var lastResult: UpdateCheckResult? = nil
 
+    nonisolated public static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.networkServiceType = .background
+        return URLSession(configuration: config)
+    }()
+
     public let preferencesStore: PreferencesStore
     public let session: URLSession
     public let currentVersion: String
@@ -22,7 +29,7 @@ public final class UpdateService: ObservableObject {
 
     public init(
         preferencesStore: PreferencesStore,
-        session: URLSession = .shared,
+        session: URLSession = UpdateService.defaultSession,
         currentVersion: String = AppConstants.appVersion,
         fetchRelease: (() async throws -> GitHubRelease?)? = nil
     ) {
@@ -33,8 +40,8 @@ public final class UpdateService: ObservableObject {
     }
 
     @discardableResult
-    public func checkForUpdates(manual: Bool = false) async -> UpdateCheckResult {
-        if !manual && preferencesStore.settings.updateConsent != .allowed {
+    public func checkForUpdates(manual: Bool = false, isLowPowerModeEnabled: Bool = false) async -> UpdateCheckResult {
+        if !manual && (preferencesStore.settings.updateConsent != .allowed || isLowPowerModeEnabled) {
             let result = UpdateCheckResult.skippedNotConsented
             self.lastResult = result
             return result
