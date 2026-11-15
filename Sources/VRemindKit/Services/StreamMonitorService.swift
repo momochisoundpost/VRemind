@@ -452,7 +452,7 @@ public final class StreamMonitorService: ObservableObject {
     }
 }
 
-private final class SleepTimerCoordinator: @unchecked Sendable {
+final class SleepTimerCoordinator: @unchecked Sendable {
     private let lock = NSLock()
     private var timer: DispatchSourceTimer?
     private var continuation: CheckedContinuation<Void, Never>?
@@ -464,10 +464,13 @@ private final class SleepTimerCoordinator: @unchecked Sendable {
         continuation: CheckedContinuation<Void, Never>
     ) {
         lock.lock()
-        defer { lock.unlock() }
+        if isResumed {
+            lock.unlock()
+            continuation.resume()
+            return
+        }
 
         self.continuation = continuation
-        self.isResumed = false
 
         let timer = DispatchSource.makeTimerSource(
             flags: [],
@@ -482,6 +485,7 @@ private final class SleepTimerCoordinator: @unchecked Sendable {
             self?.resumeOnce()
         }
         timer.resume()
+        lock.unlock()
     }
 
     func reschedule(interval: TimeInterval, leeway: TimeInterval) {

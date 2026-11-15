@@ -1225,4 +1225,25 @@ struct StreamMonitorServiceTests {
 
         service.stopPolling()
     }
+
+    @Test func testSleepTimerCoordinatorPreStartCancellationResumesImmediately() async {
+        let coordinator = SleepTimerCoordinator()
+        // Cancel BEFORE start is called (simulating withTaskCancellationHandler onCancel firing before start)
+        coordinator.cancel()
+
+        let resumedImmediately = ValueBox<Bool>(false)
+        let waitTask = Task {
+            await withCheckedContinuation { cont in
+                coordinator.start(interval: 10, leeway: 1, continuation: cont)
+            }
+            resumedImmediately.set(true)
+        }
+
+        // Give it a tiny fraction of a second (50ms) - if it resumes immediately, it completes well within 50ms
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(resumedImmediately.get() == true)
+
+        waitTask.cancel()
+        coordinator.cancel()
+    }
 }
