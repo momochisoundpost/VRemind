@@ -43,6 +43,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
     @Published public var selectedPlatform: StreamPlatform = .youtube
     @Published public var newHandleInput: String = ""
     @Published public private(set) var validationError: String? = nil
+    @Published public var isPopoverVisible: Bool = false
 
     public var secretAlertPresenter: SecretAlertPresenter? = nil
 
@@ -70,6 +71,19 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
     public let channelStore: ChannelStore
     public let monitorService: StreamMonitorService
+    public let powerMonitor: PowerStateMonitor?
+
+    public var preferencesStore: PreferencesStore {
+        monitorService.preferencesStore
+    }
+
+    public var areAnimationsPaused: Bool {
+        preferencesStore.settings.reduceMotion || (powerMonitor?.currentPolicy.animationsPaused ?? false)
+    }
+
+    public var shouldAnimatePopoverEffects: Bool {
+        isPopoverVisible && !areAnimationsPaused
+    }
 
     private let dateProvider: () -> Date
     private let calendar: Calendar
@@ -78,18 +92,22 @@ public final class MenuBarStatusViewModel: ObservableObject {
     public init(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,
+        powerMonitor: PowerStateMonitor? = nil,
         dateProvider: @escaping () -> Date = { Date() },
         calendar: Calendar = .current
     ) {
         self.channelStore = channelStore
         self.monitorService = monitorService
+        let resolvedPowerMonitor = powerMonitor ?? monitorService.powerMonitor
+        self.powerMonitor = resolvedPowerMonitor
         self.dateProvider = dateProvider
         self.calendar = calendar
 
-        Publishers.Merge3(
+        Publishers.Merge4(
             channelStore.objectWillChange,
             monitorService.objectWillChange,
-            monitorService.preferencesStore.objectWillChange
+            monitorService.preferencesStore.objectWillChange,
+            resolvedPowerMonitor.objectWillChange
         )
         .sink { [weak self] _ in
             self?.objectWillChange.send()
@@ -210,7 +228,7 @@ public final class MenuBarStatusViewModel: ObservableObject {
     }
 
     public func isPopoverConfettiActive(date: Date = Date()) -> Bool {
-        guard !monitorService.preferencesStore.settings.reduceMotion else {
+        guard !areAnimationsPaused else {
             return false
         }
         return CelebrationDetector.shouldShowConfetti(
@@ -239,7 +257,6 @@ public struct MenuBarStatusView: View {
     @ObservedObject private var channelStore: ChannelStore
     @ObservedObject private var monitorService: StreamMonitorService
     @ObservedObject private var preferencesStore: PreferencesStore
-    @State private var isPopoverVisible = false
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
 
@@ -270,16 +287,16 @@ public struct MenuBarStatusView: View {
                 AddChannelBarView(viewModel: viewModel)
             }
 
-            if isPopoverVisible && viewModel.isPopoverConfettiActive() {
+            if viewModel.isPopoverVisible && viewModel.isPopoverConfettiActive() {
                 ConfettiOverlayView()
             }
         }
         .frame(width: 360, height: 440)
         .onAppear {
-            isPopoverVisible = true
+            viewModel.isPopoverVisible = true
         }
         .onDisappear {
-            isPopoverVisible = false
+            viewModel.isPopoverVisible = false
         }
     }
 
@@ -395,7 +412,8 @@ public struct MenuBarStatusView: View {
         color: Color,
         channels: [WatchedChannel]
     ) -> some View {
-        let reduceMotion = preferencesStore.settings.reduceMotion
+        let reduceMotion = viewModel.areAnimationsPaused
+        let animate = viewModel.shouldAnimatePopoverEffects
         let isCelebrating = (title == "LIVE NOW" || title == "UPCOMING") && viewModel.isSectionCelebrating(channels)
 
         return VStack(alignment: .leading, spacing: 4) {
@@ -403,7 +421,7 @@ public struct MenuBarStatusView: View {
                 Text(title)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(color)
-                    .rainbowForeground(active: isCelebrating, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebrating, animate: animate, reduceMotion: reduceMotion)
 
                 Text("(\(count))")
                     .font(.system(size: 11))
@@ -418,6 +436,7 @@ public struct MenuBarStatusView: View {
                 ChannelRowView(
                     channel: channel,
                     status: viewModel.monitorService.status(for: channel),
+                    animate: animate,
                     reduceMotion: reduceMotion,
                     onDelete: {
                         viewModel.removeChannel(id: channel.id)
@@ -444,15 +463,17 @@ public struct MenuBarStatusView: View {
         button.toolTip = isLive ? "VRemind (Live now)" : "VRemind"
     }
 
-    public static func makePopover(
+    public static func makePopoverWithViewModel(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,
-        onOpenPreferences: @escaping () -> Void,
-        onQuit: @escaping () -> Void
-    ) -> NSPopover {
+        powerMonitor: PowerStateMonitor? = nil,
+        onOpenPreferences: @escaping () -> Void = {},
+        onQuit: @escaping () -> Void = {}
+    ) -> (popover: NSPopover, viewModel: MenuBarStatusViewModel) {
         let viewModel = MenuBarStatusViewModel(
             channelStore: channelStore,
-            monitorService: monitorService
+            monitorService: monitorService,
+            powerMonitor: powerMonitor
         )
         let rootView = MenuBarStatusView(
             viewModel: viewModel,
@@ -465,6 +486,22 @@ public struct MenuBarStatusView: View {
         popover.contentSize = NSSize(width: 360, height: 440)
         popover.behavior = .transient
         popover.contentViewController = hostingController
-        return popover
+        return (popover, viewModel)
+    }
+
+    public static func makePopover(
+        channelStore: ChannelStore,
+        monitorService: StreamMonitorService,
+        powerMonitor: PowerStateMonitor? = nil,
+        onOpenPreferences: @escaping () -> Void = {},
+        onQuit: @escaping () -> Void = {}
+    ) -> NSPopover {
+        makePopoverWithViewModel(
+            channelStore: channelStore,
+            monitorService: monitorService,
+            powerMonitor: powerMonitor,
+            onOpenPreferences: onOpenPreferences,
+            onQuit: onQuit
+        ).popover
     }
 }

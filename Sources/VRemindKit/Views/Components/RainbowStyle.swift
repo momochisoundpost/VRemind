@@ -13,23 +13,37 @@ public enum RainbowPalette {
 }
 
 public struct RainbowGradientView: View {
+    public let animate: Bool
     public let reduceMotion: Bool
 
-    public init(reduceMotion: Bool = false) {
+    public var showsAnimatedTimeline: Bool {
+        animate && !reduceMotion
+    }
+
+    public init(animate: Bool = true, reduceMotion: Bool = false) {
+        self.animate = animate
         self.reduceMotion = reduceMotion
     }
 
     public var body: some View {
-        TimelineView(.animation) { context in
-            let cycleDuration = reduceMotion ? 10.0 : 3.0
-            let phase = context.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: cycleDuration) / cycleDuration
-            let shift = CGFloat(phase) * 2.0 - 1.0
+        if showsAnimatedTimeline {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                let cycleDuration = 3.0
+                let phase = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: cycleDuration) / cycleDuration
+                let shift = CGFloat(phase) * 2.0 - 1.0
 
+                LinearGradient(
+                    gradient: Gradient(colors: RainbowPalette.colors),
+                    startPoint: UnitPoint(x: shift, y: 0.0),
+                    endPoint: UnitPoint(x: shift + 1.0, y: 1.0)
+                )
+            }
+        } else {
             LinearGradient(
                 gradient: Gradient(colors: RainbowPalette.colors),
-                startPoint: UnitPoint(x: shift, y: 0.0),
-                endPoint: UnitPoint(x: shift + 1.0, y: 1.0)
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
         }
     }
@@ -37,10 +51,12 @@ public struct RainbowGradientView: View {
 
 public struct RainbowTextModifier: ViewModifier {
     public let active: Bool
+    public let animate: Bool
     public let reduceMotion: Bool
 
-    public init(active: Bool, reduceMotion: Bool = false) {
+    public init(active: Bool, animate: Bool = true, reduceMotion: Bool = false) {
         self.active = active
+        self.animate = animate
         self.reduceMotion = reduceMotion
     }
 
@@ -49,7 +65,7 @@ public struct RainbowTextModifier: ViewModifier {
             content
                 .hidden()
                 .overlay(
-                    RainbowGradientView(reduceMotion: reduceMotion)
+                    RainbowGradientView(animate: animate, reduceMotion: reduceMotion)
                         .mask(content)
                 )
         } else {
@@ -59,7 +75,11 @@ public struct RainbowTextModifier: ViewModifier {
 }
 
 extension View {
-    public func rainbowForeground(active: Bool, reduceMotion: Bool = false) -> some View {
-        modifier(RainbowTextModifier(active: active, reduceMotion: reduceMotion))
+    public func rainbowForeground(
+        active: Bool,
+        animate: Bool = true,
+        reduceMotion: Bool = false
+    ) -> some View {
+        modifier(RainbowTextModifier(active: active, animate: animate, reduceMotion: reduceMotion))
     }
 }

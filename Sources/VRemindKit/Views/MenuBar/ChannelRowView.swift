@@ -38,6 +38,7 @@ extension View {
 public struct ChannelRowView: View {
     public let channel: WatchedChannel
     public let status: StreamStatus
+    public let animate: Bool
     public let reduceMotion: Bool
     public let dateProvider: () -> Date
     public let onDelete: () -> Void
@@ -45,12 +46,14 @@ public struct ChannelRowView: View {
     public init(
         channel: WatchedChannel,
         status: StreamStatus,
+        animate: Bool = true,
         reduceMotion: Bool = false,
         dateProvider: @escaping () -> Date = { Date() },
         onDelete: @escaping () -> Void
     ) {
         self.channel = channel
         self.status = status
+        self.animate = animate
         self.reduceMotion = reduceMotion
         self.dateProvider = dateProvider
         self.onDelete = onDelete
@@ -112,6 +115,7 @@ public struct ChannelRowView: View {
                         StatusBadge(
                             isLive: true,
                             isCelebration: celebration.isCelebration,
+                            animate: animate,
                             reduceMotion: reduceMotion
                         )
                     } else if case .upcoming = status, celebration.isCelebration {
@@ -119,6 +123,7 @@ public struct ChannelRowView: View {
                             isLive: false,
                             label: "UPCOMING",
                             isCelebration: true,
+                            animate: animate,
                             reduceMotion: reduceMotion
                         )
                     }
@@ -154,7 +159,7 @@ public struct ChannelRowView: View {
                 Text("Live for \(ElapsedTime.liveDuration(since: startedAt))")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(Theme.live)
-                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
             }
 
         case .upcoming(_, let title, let scheduledStartTime):
@@ -168,7 +173,7 @@ public struct ChannelRowView: View {
                 Text(formatScheduledTime(scheduledStartTime))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.orange)
-                    .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                    .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
             }
 
         case .offline(let lastStreamedAt):

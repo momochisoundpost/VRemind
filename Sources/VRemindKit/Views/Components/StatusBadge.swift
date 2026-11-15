@@ -4,17 +4,20 @@ public struct StatusBadge: View {
     public let isLive: Bool
     public let label: String?
     public let isCelebration: Bool
+    public let animate: Bool
     public let reduceMotion: Bool
 
     public init(
         isLive: Bool,
         label: String? = nil,
         isCelebration: Bool = false,
+        animate: Bool = true,
         reduceMotion: Bool = false
     ) {
         self.isLive = isLive
         self.label = label
         self.isCelebration = isCelebration
+        self.animate = animate
         self.reduceMotion = reduceMotion
     }
 
@@ -25,12 +28,12 @@ public struct StatusBadge: View {
             Circle()
                 .fill(isLive ? Theme.live : Color.secondary.opacity(0.6))
                 .frame(width: 8, height: 8)
-                .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
 
             Text(displayLabel)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(isLive ? Theme.live : .secondary)
-                .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
@@ -41,7 +44,7 @@ public struct StatusBadge: View {
         .overlay(
             Capsule()
                 .strokeBorder(isLive ? Theme.live.opacity(0.35) : Color.secondary.opacity(0.25), lineWidth: 1)
-                .rainbowForeground(active: isCelebration, reduceMotion: reduceMotion)
+                .rainbowForeground(active: isCelebration, animate: animate, reduceMotion: reduceMotion)
         )
     }
 }

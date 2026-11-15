@@ -151,6 +151,21 @@ struct MenuBarViewTests {
         #expect(popover.behavior == .transient)
         #expect(!didOpenPrefs)
         #expect(!didQuit)
+
+        let powerMonitor = PowerStateMonitor(
+            powerSourceProvider: { .ac },
+            lowPowerModeProvider: { false },
+            notificationCenter: NotificationCenter(),
+            observeSystemPowerSource: false
+        )
+        let (popover2, vm2) = MenuBarStatusView.makePopoverWithViewModel(
+            channelStore: channelStore,
+            monitorService: monitor,
+            powerMonitor: powerMonitor
+        )
+        #expect(popover2.contentViewController != nil)
+        #expect(popover2.behavior == .transient)
+        #expect(vm2.powerMonitor === powerMonitor)
     }
 
     @Test @MainActor func testViewsRenderWithoutCrash() {
@@ -494,5 +509,67 @@ struct MenuBarViewTests {
         let confetti = NSHostingController(rootView: ConfettiOverlayView())
         let popover = NSHostingController(rootView: MenuBarStatusView(viewModel: viewModel))
         _ = (badge1.view, badge2.view, confetti.view, popover.view)
+    }
+
+    @Test @MainActor func testPopoverVisibilityAndLowPowerModeGateRainbowAndConfettiAnimations() async {
+        // 1. RainbowGradientView only runs TimelineView when animate == true && reduceMotion == false
+        #expect(RainbowGradientView(animate: true, reduceMotion: false).showsAnimatedTimeline == true)
+        #expect(RainbowGradientView(animate: false, reduceMotion: false).showsAnimatedTimeline == false)
+        #expect(RainbowGradientView(animate: true, reduceMotion: true).showsAnimatedTimeline == false)
+        #expect(RainbowGradientView(animate: false, reduceMotion: true).showsAnimatedTimeline == false)
+
+        // 2. Low Power Mode pauses confetti and popover animations even when reduceMotion == false and popover is visible
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let channelStore = ChannelStore(userDefaults: makeTestDefaults())
+        _ = channelStore.addChannel(handle: "@bday", name: "Bday")
+        let prefs = PreferencesStore(userDefaults: makeTestDefaults())
+        prefs.settings.reduceMotion = false
+
+        let liveHTML = """
+        <html><body><script>var ytInitialPlayerResponse = {"videoDetails":{"isLive":true,"title":"Happy Birthday Stream!","videoId":"v1"}};</script></body></html>
+        """
+        let okResponse = HTTPURLResponse(url: URL(string: "https://www.youtube.com/@bday/live")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+
+        let lpmBox = ValueBox<Bool>(false)
+        let powerMonitor = PowerStateMonitor(
+            powerSourceProvider: { .ac },
+            lowPowerModeProvider: { lpmBox.get() },
+            notificationCenter: NotificationCenter(),
+            observeSystemPowerSource: false
+        )
+
+        let monitor = StreamMonitorService(
+            channelStore: channelStore,
+            preferencesStore: prefs,
+            notificationService: NotificationService(center: MockNotificationCenter()),
+            fetcher: { _ in (Data(liveHTML.utf8), okResponse) },
+            snapshotStore: SpyWidgetSnapshotStore(),
+            dateProvider: { now },
+            powerMonitor: powerMonitor
+        )
+        await monitor.refreshAll()
+
+        let viewModel = MenuBarStatusViewModel(
+            channelStore: channelStore,
+            monitorService: monitor,
+            powerMonitor: powerMonitor,
+            dateProvider: { now }
+        )
+
+        // Popover starts hidden -> shouldAnimatePopoverEffects is false
+        #expect(viewModel.isPopoverVisible == false)
+        #expect(viewModel.shouldAnimatePopoverEffects == false)
+        #expect(viewModel.isPopoverConfettiActive(date: now) == true)
+
+        // Popover shown in normal power mode -> animations active
+        viewModel.isPopoverVisible = true
+        #expect(viewModel.shouldAnimatePopoverEffects == true)
+
+        // Enable Low Power Mode -> confetti & animations pause immediately
+        lpmBox.set(true)
+        powerMonitor.refresh()
+        #expect(viewModel.areAnimationsPaused == true)
+        #expect(viewModel.shouldAnimatePopoverEffects == false)
+        #expect(viewModel.isPopoverConfettiActive(date: now) == false)
     }
 }
