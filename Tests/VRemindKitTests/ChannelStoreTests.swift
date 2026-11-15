@@ -230,5 +230,28 @@ struct ChannelStoreTests {
         )
         #expect(publishCount == 0)
         #expect(store.channels.first(where: { $0.id == "youtube:@steady" })?.lastStreamedAt == started)
+
+        // Repeated poll with same notifiedLiveId: "v1" and startedAt == nil -> zero publishes, preserves lastStreamedAt
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v1", title: "Live", startedAt: nil),
+            notifiedLiveId: "v1",
+            didTransitionToLive: false
+        )
+        #expect(publishCount == 0)
+        #expect(store.channels.first(where: { $0.id == "youtube:@steady" })?.lastStreamedAt == started)
+
+        // Transition to new live video "v2" with startedAt == nil -> publishes and updates lastStreamedAt
+        store.updateStatus(
+            for: "youtube:@steady",
+            status: .live(videoId: "v2", title: "Live 2", startedAt: nil),
+            notifiedLiveId: "v2",
+            didTransitionToLive: false
+        )
+        #expect(publishCount == 1)
+        let updated = store.channels.first(where: { $0.id == "youtube:@steady" })
+        #expect(updated?.lastNotifiedVideoId == "v2")
+        #expect(updated?.lastStreamedAt != nil)
+        #expect(updated?.lastStreamedAt != started)
     }
 }

@@ -95,7 +95,7 @@ public final class PowerStateMonitor: ObservableObject {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
             return .ac
         }
-        let rawType = IOPSGetProvidingPowerSourceType(blob)?.takeRetainedValue() as String?
+        let rawType = IOPSGetProvidingPowerSourceType(blob)?.takeUnretainedValue() as String?
         return mapPowerSourceType(rawType)
     }
 

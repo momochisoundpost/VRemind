@@ -254,9 +254,6 @@ public final class MenuBarStatusViewModel: ObservableObject {
 
 public struct MenuBarStatusView: View {
     @ObservedObject public var viewModel: MenuBarStatusViewModel
-    @ObservedObject private var channelStore: ChannelStore
-    @ObservedObject private var monitorService: StreamMonitorService
-    @ObservedObject private var preferencesStore: PreferencesStore
     public let onOpenPreferences: () -> Void
     public let onQuit: () -> Void
 
@@ -270,9 +267,6 @@ public struct MenuBarStatusView: View {
         onQuit: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
-        self._channelStore = ObservedObject(wrappedValue: viewModel.channelStore)
-        self._monitorService = ObservedObject(wrappedValue: viewModel.monitorService)
-        self._preferencesStore = ObservedObject(wrappedValue: viewModel.monitorService.preferencesStore)
         self.onOpenPreferences = onOpenPreferences
         self.onQuit = onQuit
     }
@@ -457,6 +451,7 @@ public struct MenuBarStatusView: View {
         button.toolTip = isLive ? "VRemind (Live now)" : "VRemind"
     }
 
+    @MainActor
     public static func makePopoverWithViewModel(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,
@@ -483,6 +478,7 @@ public struct MenuBarStatusView: View {
         return (popover, viewModel)
     }
 
+    @MainActor
     public static func makePopover(
         channelStore: ChannelStore,
         monitorService: StreamMonitorService,

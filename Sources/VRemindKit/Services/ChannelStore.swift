@@ -138,6 +138,7 @@ public final class ChannelStore: ObservableObject {
         }
 
         var candidate = channels[index]
+        let isNewLiveNotification = notifiedLiveId != nil && notifiedLiveId != channels[index].lastNotifiedVideoId
         if let notifiedLiveId {
             candidate.lastNotifiedVideoId = notifiedLiveId
         }
@@ -149,7 +150,7 @@ public final class ChannelStore: ObservableObject {
         case .live(_, _, let startedAt):
             if let startedAt {
                 candidate.lastStreamedAt = startedAt
-            } else if candidate.lastStreamedAt == nil || didTransitionToLive || notifiedLiveId != nil {
+            } else if candidate.lastStreamedAt == nil || didTransitionToLive || isNewLiveNotification {
                 candidate.lastStreamedAt = Date()
             }
         case .offline(let lastStreamed):

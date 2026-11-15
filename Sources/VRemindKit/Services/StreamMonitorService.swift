@@ -458,6 +458,10 @@ final class SleepTimerCoordinator: @unchecked Sendable {
     private var continuation: CheckedContinuation<Void, Never>?
     private var isResumed = false
 
+    deinit {
+        resumeOnce()
+    }
+
     func start(
         interval: TimeInterval,
         leeway: TimeInterval,
