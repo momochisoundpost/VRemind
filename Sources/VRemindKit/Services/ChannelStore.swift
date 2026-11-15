@@ -167,6 +167,17 @@ public final class ChannelStore: ObservableObject {
         }
     }
 
+    public func reorderSection(orderedSectionIds: [String]) {
+        let reordered = ChannelOrderPolicy.reorderWatchlistSlots(
+            channels: channels,
+            orderedSectionIds: orderedSectionIds
+        )
+        if reordered != channels {
+            channels = reordered
+            save()
+        }
+    }
+
     public func resetToDefaults() {
         let seed = Self.defaultChannels
         channels = seed
