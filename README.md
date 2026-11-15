@@ -9,7 +9,7 @@
   <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift" alt="Swift: 5.9+"></a>
   <img src="https://img.shields.io/badge/Dependencies-0%20Third--Party-brightgreen" alt="Dependencies: 0 Third-Party">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License: MIT"></a>
-  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-188%20%2B%2069%20Core%20Passing-success" alt="Tests: 188 + 69 Core Passing"></a>
+  <a href="#running-tests"><img src="https://img.shields.io/badge/Tests-210%20%2B%2069%20Core%20Passing-success" alt="Tests: 210 + 69 Core Passing"></a>
 </p>
 
 A native macOS 12.0+ (Monterey and newer) menu bar VTuber stream reminder coded 100% in Swift with SwiftUI and AppKit, featuring zero third-party dependencies.
@@ -52,7 +52,7 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
     - `🔴 LIVE`: Highlights active broadcasts with title, elapsed uptime, and direct watch link.
     - `🗓️ UPCOMING`: Shows scheduled waiting rooms and stream start times (e.g., `in 45m`).
     - `Offline`: Displays time elapsed since the channel last streamed.
-  - **Smart Concurrency & Power Management**: Concurrency is bounded to a maximum of 3 concurrent network requests to prevent rate limiting. Background polling automatically pauses when displays go to sleep and resumes immediately upon display wake.
+  - **Smart Concurrency & Power Management**: Dynamically adapts polling interval and concurrency across AC power (`3 min`, batch `3`), battery (`5 min`, batch `2`), and Low Power Mode (`10 min`, batch `1`), dispatches polling with background QoS for Apple Silicon efficiency cores, throttles process priority via `PRIO_DARWIN_BG` whenever all UI surfaces are closed, and automatically pauses on both system and display sleep.
   - **Solid Menu Bar Icon**: Displays a subtle `antenna.radiowaves.left.and.right` icon when all channels are offline and switches to a steady, non-distracting red (`systemRed`) when any watched channel is live.
 
 - **Native macOS Desktop Widgets (`WidgetKit`)**:
@@ -73,6 +73,8 @@ VRemind sits quietly in your macOS menu bar, monitors your favorite VTubers and 
   - Native `AVKit` (`AVPlayerView`) muted-looping video playback for GitHub `<video>` embeds and `.mp4`/`.mov`/`.m4v` clips with a mute toggle pill, tap-to-pause, "Open Video in Browser" fallback, and automatic teardown on close — zero `WKWebView` bloat.
 
 - **Menu Bar Polish**:
+  - Hover-only trash delete buttons and subtle row highlights keep the watchlist clean at rest and hide delete targets while dragging.
+  - Intra-section drag-to-reorder within `LIVE NOW`, `UPCOMING`, and `OFFLINE` with slot-preserving persistence and same-day custom order projection.
   - Tactile pointing hand cursor (`NSCursor.pointingHand`) and full `@handle` tooltips on channel rows.
   - Ready for macOS 27 Golden Gate liquid glass and vibrancy styling.
 
@@ -179,8 +181,9 @@ You can also inspect the full source code and build it locally in seconds with `
 ### Does this drain my MacBook battery or hog CPU in the background?
 **Not at all.** VRemind is engineered specifically for power efficiency on macOS:
 - Network sessions are ephemeral and cache-free to prevent memory bloat.
-- Network polling runs gently once every 3 minutes, throttled to a maximum of 3 concurrent requests.
-- When your Mac display turns off or enters sleep, polling completely stops. It resumes instantly the moment your display wakes up.
+- 3-tier power adaptation scales polling automatically (`3 min` / batch `3` on AC, `5 min` / batch `2` on battery, `10 min` / batch `1` in Low Power Mode) and dispatches fetches at background QoS on Apple Silicon efficiency cores.
+- Drops the idle process into Darwin's lowest background scheduling tier (`PRIO_DARWIN_BG`) whenever the popover and windows are closed, deferring automatic update checks in Low Power Mode and pausing popover animations completely when hidden.
+- When your Mac display turns off or the system enters sleep, polling completely stops. It resumes instantly upon wake.
 
 ### Can I track creators who aren't VTubers?
 **Yes.** While VRemind was designed with VTubers in mind, you can monitor any YouTube or Twitch channel that livestreams by entering their handle/username (e.g. tech creators, podcasters, esports channels, gamers).
@@ -189,7 +192,7 @@ You can also inspect the full source code and build it locally in seconds with `
 **Yes.** Caitlyn Momochi is just the default starter channel so the list isn't blank on first launch. Hover over the channel row, click the trash can icon, and add whoever you like.
 
 ### What if YouTube or Twitch changes its page or endpoint format?
-Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider` in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore), upstream platform changes can be updated cleanly without touching macOS UI code. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the Mac bridge and core engine are backed by 257 automated unit and view tests (`188` in `VRemindKitTests` + `69` in `VRemindCoreTests`).
+Because VRemind uses modular parsers (`LivePageParser`, `TwitchResponseParser`) behind `StreamProvider` in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore), upstream platform changes can be updated cleanly without touching macOS UI code. If a creator goes live and VRemind doesn't pick it up, please open an Issue or submit a Pull Request—the Mac bridge and core engine are backed by 279 automated unit and view tests (`210` in `VRemindKitTests` + `69` in `VRemindCoreTests`).
 
 ---
 
@@ -247,7 +250,7 @@ VRemind/
 
 ## Running Tests
 
-Run the macOS app & bridge automated test suite (`188` tests across `17` suites — up from `169` in v1.3) using Apple's modern Swift Testing framework:
+Run the macOS app & bridge automated test suite (`210` tests across `19` suites — up from `188` in v1.3.1) using Apple's modern Swift Testing framework:
 
 ```bash
 bash scripts/test.sh
@@ -260,7 +263,7 @@ bash scripts/test.sh --filter StreamMonitorServiceTests
 bash scripts/test.sh --filter MenuBarViewTests
 ```
 
-Core engine tests (`69` tests across `11` suites covering providers, parsers, polling, storage, and celebration logic) live in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore). *(Sadly `188 + 69` ruined v1.3's `169 + 69` funny number combo, so pour one out for the nice numbers.)*
+Core engine tests (`69` tests across `11` suites covering providers, parsers, polling, storage, and celebration logic) live in [`VRemindCore`](https://github.com/momochisoundpost/VRemindCore). *(Sadly `210 + 69` still keeps v1.3's `69` alive, so there's that.)*
 
 ---
 

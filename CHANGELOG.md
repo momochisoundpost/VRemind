@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.3] - 2026-11-15
+
+### Release Notes
+**The "Genuine eBay Battery (Service Recommended)" Update**
+
+Windows ([`VRemind-win`](https://github.com/momochisoundpost/VRemind-win)) was supposed to be a second-class citizen port, and I genuinely don't know how or why it ended up better than the original Mac app. So much for "maintenance mode" — I had to backport the cleaner hover-only trash icon and drag-to-reorder straight from the Windows port back into macOS, all without touching a single line of `VRemindCore`.
+
+Anyways, we are doing good — especially on crappy laptops running on a "Genuine" eBay replacement battery permanently stuck on `Service Recommended` status — because we went full sicko mode optimizing background power usage and putting VRemind at the absolute bottom of the Darwin kernel food chain when idle.
+
+### Highlights & What's New
+
+#### 🔋 Crappy Laptop & "Genuine" eBay Battery Power Optimization (`PowerStateMonitor` & `ProcessPriorityManager`)
+- **3-Tier Power Adaptation (AC / Battery / Low Power Mode):** Automatically scales background polling cadence and concurrent network fetch batch sizes via IOKit power source notifications (`IOPSNotificationCreateRunLoopSource`) and `NSProcessInfoPowerStateDidChange`:
+  - **AC Power:** `3 min` interval, batch size `3`
+  - **Battery Power:** `5 min` interval, batch size `2`
+  - **Low Power Mode:** `10 min` interval, batch size `1` (plus automatic background GitHub update checks are deferred until Low Power Mode turns off or you click **Check for Updates Now** manually)
+- **Lowest Darwin Background Priority (`PRIO_DARWIN_BG`):** Drops the entire VRemind process into Darwin's lowest background scheduling tier (`setpriority(PRIO_DARWIN_PROCESS, 0, PRIO_DARWIN_BG)`) whenever all UI windows and the popover are closed, throttling CPU, disk, and network priority below normal apps — and immediately restores interactive priority the moment you open the popover, Preferences, Onboarding, or Updater window.
+- **E-Core Background Polling & Clamshell Sleep Hooks:** Polling tasks now dispatch with `.background` priority so Apple Silicon (`M1` and newer) schedules HTML/GraphQL scraping on efficiency cores. Subscribes to both system sleep/wake (`NSWorkspace.willSleepNotification` / `didWakeNotification`) and display sleep/wake, and skips no-op `UserDefaults` writes and unchanged WidgetKit timeline reloads.
+- **Popover-Gated Animations:** Rainbow `TimelineView` (20 FPS) and party confetti `Canvas` (30 FPS) now pause completely when the menu bar popover is closed or when macOS Low Power Mode is enabled.
+
+#### 🖱️ Backported from `VRemind-win` (Because Why Did Windows End Up Better?)
+- **Hover-Only Trash Icon & Row Highlight:** Channel rows stay clean at rest and only reveal the red trash delete button and subtle rounded row highlight when you hover your pointer over an entry (and hide the delete button while any row is being dragged).
+- **Intra-Section Drag-to-Reorder (`ChannelOrderPolicy`):** Drag channels vertically (`>= 5pt` activation threshold) within `LIVE NOW`, `UPCOMING`, or `OFFLINE` to reorder your watchlist with live sibling row animations, slot-preserving `UserDefaults` persistence in `ChannelStore`, and same-calendar-day custom order projection — all with zero backend changes to `VRemindCore`.
+
+---
+
 ## [1.3.1] - 2026-11-13
 
 ### Release Notes
